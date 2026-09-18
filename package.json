@@ -13,7 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed/index.ts",
-    "db:verify": "tsx scripts/verify-schema.ts",
+    "db:verify": "tsx scripts/verify-schema.ts && tsx scripts/verify-ai.ts",
     "fixtures:build": "tsc --noEmit -p . && tsx seed/src/build.ts"
   },
   "dependencies": {
