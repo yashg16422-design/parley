@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link";
 import { ArrowLeft, Bookmark, Crosshair, Scissors, Search, X } from "lucide-react";
 import { addHighlight, createClip } from "@app/actions/meetings";
+import type { Attachment } from "@/db/json-types";
+import { Agenda, Attachments } from "@/components/event-details";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,6 +27,7 @@ export type MeetingViewProps = {
   chapters: { title: string; startMs: number; endMs: number }[];
   templates: { id: string; name: string }[];
   initialMs: number;
+  event?: { id: string; agenda: string | null; attachments: Attachment[] } | null;
 };
 
 export function MeetingView(m: MeetingViewProps) {
@@ -72,7 +75,7 @@ export function MeetingView(m: MeetingViewProps) {
     <div className="grid lg:h-dvh lg:grid-cols-[minmax(0,1fr)_400px]">
       <div className="flex min-h-0 flex-col">
         <header className="flex items-center gap-3 border-b px-4 py-3">
-          <Button variant="ghost" size="icon" asChild><Link href="/" aria-label="Back"><ArrowLeft /></Link></Button>
+          <Button variant="ghost" size="icon" asChild><Link href="/home" aria-label="Back"><ArrowLeft /></Link></Button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-semibold">{m.title}</h1>
             <p className="text-xs text-muted-foreground">{m.startedAt && `${fmtDay(m.startedAt)}, ${fmtTime(m.startedAt)} · `}{duration(m.durationMs)} · {m.participants.length} participants</p>
@@ -125,6 +128,12 @@ export function MeetingView(m: MeetingViewProps) {
           </TabsList>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
             <TabsContent value="summary" className="space-y-6">
+              {m.event && (m.event.agenda || m.event.attachments.length > 0) && (
+                <details className="rounded-lg border bg-background p-3">
+                  <summary className="cursor-pointer text-sm font-semibold">Agenda & files</summary>
+                  <div className="mt-2 space-y-2"><Agenda text={m.event.agenda} /><Attachments eventId={m.event.id} items={m.event.attachments} /></div>
+                </details>
+              )}
               <SummaryPanel meetingId={m.id} templates={m.templates} initial={m.defaultTemplateId} startOf={(q) => bySeq.get(q)?.startMs} onCite={cite} />
               <div className="border-t pt-4">
                 <h3 className="mb-2 text-sm font-semibold">Talk time</h3>

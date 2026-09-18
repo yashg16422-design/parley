@@ -1,4 +1,5 @@
-import { CalendarDays, CheckSquare, Home, Search, Waves } from "lucide-react";
+import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves } from "lucide-react";
+import { leaveWorkspace } from "@app/actions/workspace";
 import { NavLink } from "@/components/nav-link";
 import { PersonAvatar } from "@/components/person";
 import { currentUser } from "@/queries";
@@ -13,22 +14,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           Parley
         </div>
         <nav className="mt-4 flex flex-col gap-1">
-          <NavLink href="/"><Home />Home</NavLink>
+          <NavLink href="/home"><Home />Home</NavLink>
           <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>
           <NavLink href="/action-items"><CheckSquare />Action items</NavLink>
           <NavLink href="/search"><Search />Search</NavLink>
         </nav>
         <div className="mt-auto flex items-center gap-2 rounded-lg border bg-background p-2">
           <PersonAvatar name={me.name} color="#7C3AED" className="size-8" />
-          <div className="min-w-0 text-xs">
+          <div className="min-w-0 flex-1 text-xs">
             <div className="truncate font-medium">{me.name}</div>
             <div className="truncate text-muted-foreground">{me.title}</div>
           </div>
+          <form action={leaveWorkspace}>
+            <button title="Switch workspace" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><LogOut className="size-4" /></button>
+          </form>
         </div>
       </aside>
       <main className="min-w-0 flex-1">
         <nav className="sticky top-0 z-20 flex items-center justify-around border-b bg-background/95 p-1.5 backdrop-blur md:hidden">
-          <NavLink href="/"><Home />Home</NavLink>
+          <NavLink href="/home"><Home />Home</NavLink>
           <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>
           <NavLink href="/action-items"><CheckSquare />Tasks</NavLink>
           <NavLink href="/search"><Search />Search</NavLink>

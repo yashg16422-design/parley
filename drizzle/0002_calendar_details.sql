@@ -1,0 +1,4 @@
+ALTER TABLE "calendar_events" ADD COLUMN "agenda" text;--> statement-breakpoint
+ALTER TABLE "calendar_events" ADD COLUMN "attachments" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "calendar_events" ADD COLUMN "search" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector('english', title), 'A') || setweight(to_tsvector('english', coalesce(agenda, '')), 'B') || setweight(jsonb_to_tsvector('english', jsonb_path_query_array(attachments, '$[*].title'), '["string"]'), 'B')) STORED;--> statement-breakpoint
+CREATE INDEX "calendar_events_search_idx" ON "calendar_events" USING gin ("search");

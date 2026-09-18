@@ -20,7 +20,8 @@ import * as s from "../src/db/schema";
 import { loadFixtures } from "../src/db/seed/fixtures";
 import { seed } from "../src/db/seed/seed";
 import { stableId } from "../src/lib/stable-id";
-import { expandQuery, searchTranscripts } from "../src/search";
+import { extractiveNotes } from "../src/ai/extractive";
+import { expandQuery, searchEvents, searchFor, searchTranscripts } from "../src/search";
 
 const FAKE = 999_999;
 const lineRe = /^\[#(\d+) \S+ [^\]]+\] (.*)$/gm;
@@ -161,18 +162,24 @@ async function main() {
   assert.deepEqual(await drainMeeting(db, retryId, junk), { ran: 0 }, "failed jobs are not picked up again");
   console.log("✓ job queue: model failure re-queued with backoff twice, then marked failed");
 
-  // Search Server Action, through the same getDb() the app uses.
-  process.env.DATABASE_URL = "pglite:";
-  const { getDb } = await import("../src/db");
-  const appDb = getDb();
-  await migrate(appDb as never, { migrationsFolder: "drizzle" });
-  await seed(appDb, (await loadFixtures("seed/fixtures")).dataset);
-  const { searchAction } = await import("../app/actions/search");
-  const res = await searchAction({ query: "single sign-on", limit: 100 });
-  assert.ok(res.ok && res.meetings >= 10 && /'sso'/.test(res.expanded));
+  // Workspace-scoped search: transcripts + calendar agendas/attachments, with synonyms.
+  const maya = stableId("user:maya@driftwood.example");
+  const res = await searchFor(db, maya, "single sign-on", 100);
+  assert.ok(res.meetings >= 8 && /'sso'/.test(res.expanded));
   assert.ok(res.hits.every((h) => h.href === `/meetings/${h.meetingId}?t=${h.startMs}#line-${h.seq}`));
-  assert.deepEqual(await searchAction({ query: "   " }), { ok: false, error: "Too small: expected string to have >=1 characters" });
-  console.log(`✓ searchAction: ${res.hits.length} cited hits across ${res.meetings} meetings; empty query rejected`);
+  assert.ok(res.events.some((e) => e.title === "Q4 Product Alignment: Insights 2.0"), "agenda/attachment titles are searchable (SSO one-pager)");
+  const byAttachment = await searchEvents(db, "eval sheet", maya);
+  assert.ok(byAttachment.some((e) => e.title === "Insights 2.0 beta go/no-go" && e.parts.some((p) => p.hit)), "attachment title match, highlighted");
+  const [stranger] = await db.insert(s.users).values({ email: "guest@guest.parley.example", name: "Guest" }).returning();
+  const empty = await searchFor(db, stranger!.id, "single sign-on");
+  assert.deepEqual([empty.hits.length, empty.events.length], [0, 0], "a fresh workspace sees none of the demo data");
+  console.log(`✓ scoped search: ${res.hits.length} transcript hits in ${res.meetings} meetings + ${res.events.length} calendar events; fresh workspace sees 0`);
+
+  // Rule-based notes (no model, not a replay) are grounded by construction.
+  const { knowledge, actions: ruleActions } = extractiveNotes(segs);
+  assert.ok(ruleActions.length > 5 && ruleActions.every((a) => segs[a.seqs[0]!]!.text.includes(a.quote)));
+  assert.ok(knowledge.topics.length === wins.length && knowledge.speakerContributions.length === 8);
+  console.log(`✓ rule-based notes: ${ruleActions.length} commitments, ${knowledge.decisions.length} decisions, ${knowledge.openQuestions.length} questions, all quoting real lines`);
 
   // Synonym search.
   assert.match(await expandQuery(db, "single sign-on"), /'sso'/);
@@ -180,7 +187,7 @@ async function main() {
   const [sso = 0, longForm, saml, both = 0] = await Promise.all(["SSO", "single sign-on", "SAML", "SSO timeline"].map(meetingsFor));
   assert.ok(sso >= 10 && longForm === sso && saml === sso, `SSO ${sso}, single sign-on ${longForm}, SAML ${saml}`);
   assert.ok(both > 0 && both < sso, "other query terms still narrow the search");
-  const hits = await searchTranscripts(db, "single sign-on", { ownerId: stableId("user:aisha@driftwood.example") });
+  const hits = await searchTranscripts(db, "single sign-on", { userId: stableId("user:aisha@driftwood.example") });
   assert.ok(hits.length > 0 && hits.every((h) => h.parts.some((p) => p.hit) && !h.parts.some((p) => /[\u0002\u0003<]/.test(p.text))), "owner filter + safe highlighted parts");
   console.log(`✓ search: "single sign-on" ${longForm} meetings (was 2), "SSO" ${sso}, "SAML" ${saml}, "SSO timeline" ${both}`);
 

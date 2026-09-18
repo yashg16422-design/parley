@@ -32,6 +32,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  Attachment,
   Attendee,
   ChunkNotes,
   MeetingKnowledge,
@@ -123,12 +124,19 @@ export const calendarEvents = pgTable(
     platform: meetingPlatform("platform").notNull(),
     meetingUrl: text("meeting_url").notNull(),
     attendees: jsonb("attendees").$type<Attendee[]>().notNull().default([]),
+    agenda: text("agenda"),
+    attachments: jsonb("attachments").$type<Attachment[]>().notNull().default([]),
     /** Per-event override of the connection's auto-record rule. */
     recordEnabled: boolean("record_enabled").notNull().default(true),
+    /** Title, agenda and attachment titles (not URLs). */
+    search: tsvector("search").generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', title), 'A') || setweight(to_tsvector('english', coalesce(agenda, '')), 'B') || setweight(jsonb_to_tsvector('english', jsonb_path_query_array(attachments, '$[*].title'), '["string"]'), 'B')`,
+    ),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex("calendar_events_connection_external_uq").on(t.connectionId, t.externalId),
+    index("calendar_events_search_idx").using("gin", t.search),
     // Calendar views: "this user's events in a date window".
     index("calendar_events_user_starts_idx").on(t.userId, t.startsAt),
     check("calendar_events_time_order_ck", sql`${t.endsAt} > ${t.startsAt}`),

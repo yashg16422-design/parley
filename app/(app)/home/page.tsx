@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { CheckCircle2, Clock, Radio, Sparkles, Video } from "lucide-react";
+import { CalendarPlus, CheckCircle2, Clock, Mic, Radio, Sparkles, Video } from "lucide-react";
+import { Attachments, PLATFORM } from "@/components/event-details";
+import { JoinRecord } from "@/components/join-record";
 import { PageHeader } from "@/components/page-header";
 import { AvatarStack } from "@/components/person";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +10,6 @@ import { Card } from "@/components/ui/card";
 import { duration, fmtTime, relativeDay } from "@/lib/format";
 import { currentUser, listMeetings, upcomingEvents } from "@/queries";
 
-const PLATFORM = { zoom: "Zoom", google_meet: "Google Meet", teams: "Teams" } as const;
 
 export default async function Home() {
   const me = await currentUser();
@@ -20,7 +21,8 @@ export default async function Home() {
   return (
     <>
       <PageHeader title={`Good to see you, ${me.name.split(" ")[0]}`} subtitle="Your recorded calls, summarized and searchable.">
-        <Button asChild><Link href="/live"><Radio />Start a live call</Link></Button>
+        <Button asChild variant="outline"><Link href="/live"><Radio />Replay a sample</Link></Button>
+        <Button asChild><Link href="/live/mic"><Mic />Record a meeting</Link></Button>
       </PageHeader>
       <div className="grid gap-6 p-6 xl:grid-cols-[1fr_320px]">
         <section className="min-w-0 space-y-6">
@@ -39,6 +41,18 @@ export default async function Home() {
               );
             })}
           </div>
+          {!meetings.length && (
+            <Card className="items-center gap-3 p-10 text-center">
+              <Mic className="size-8 text-primary" />
+              <h2 className="font-semibold">No meetings yet</h2>
+              <p className="max-w-sm text-sm text-muted-foreground">Record a real conversation from your microphone, or replay a sample call to see notes build live.</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button asChild><Link href="/live/mic"><Mic />Record a meeting</Link></Button>
+                <Button asChild variant="outline"><Link href="/live"><Radio />Replay a sample call</Link></Button>
+                {!upcoming.length && <Button asChild variant="ghost"><Link href="/calendar"><CalendarPlus />Connect calendar</Link></Button>}
+              </div>
+            </Card>
+          )}
           {[...groups].map(([day, items]) => (
             <div key={day}>
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{day}</h2>
@@ -72,6 +86,7 @@ export default async function Home() {
             <h2 className="text-sm font-semibold">Coming up</h2>
             <Link href="/calendar" className="text-xs text-primary hover:underline">Calendar</Link>
           </div>
+          {!upcoming.length && <p className="text-sm text-muted-foreground">Nothing scheduled. <Link href="/calendar" className="text-primary hover:underline">Connect your calendar</Link></p>}
           {upcoming.map((e) => (
             <Card key={e.id} className="gap-2 p-3">
               <div className="flex items-start justify-between gap-2">
@@ -79,7 +94,8 @@ export default async function Home() {
                 <Badge variant={e.recordEnabled ? "default" : "outline"} className="shrink-0">{e.recordEnabled ? "Will record" : "Off"}</Badge>
               </div>
               <div className="text-xs text-muted-foreground">{relativeDay(e.startsAt)} · {fmtTime(e.startsAt)} · {PLATFORM[e.platform]}</div>
-              <AvatarStack people={e.attendees.map((a) => ({ name: a.name }))} max={5} />
+              <Attachments eventId={e.id} items={e.attachments.slice(0, 2)} />
+              <JoinRecord eventId={e.id} meetingUrl={e.meetingUrl} platform={e.platform} />
             </Card>
           ))}
         </aside>

@@ -1,15 +1,9 @@
 import "server-only";
-import { and, asc, desc, eq, exists, gte, inArray, lte, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import * as s from "./db/schema";
 
-export const DEMO_EMAIL = process.env.DEMO_USER_EMAIL ?? "maya@driftwood.example";
-
-export async function currentUser() {
-  const u = await getDb().query.users.findFirst({ where: eq(s.users.email, DEMO_EMAIL) });
-  if (!u) throw new Error(`Demo user ${DEMO_EMAIL} not found. Run npm run db:seed.`);
-  return u;
-}
+export { currentUser } from "./session";
 
 /** Meetings the user recorded or attended. */
 const mine = (userId: string) =>
@@ -36,11 +30,12 @@ export async function upcomingEvents(userId: string, days = 14) {
   });
 }
 
-export async function meetingDetail(id: string) {
+/** A meeting the user can see (`userId`), or any meeting when replaying a sample (`userId` omitted). */
+export async function meetingDetail(id: string, userId?: string) {
   const db = getDb();
   const [m, templates] = await Promise.all([
     db.query.meetings.findFirst({
-      where: eq(s.meetings.id, id),
+      where: userId ? and(eq(s.meetings.id, id), mine(userId)) : eq(s.meetings.id, id),
       with: {
         participants: { orderBy: asc(s.meetingParticipants.speakerIdx) },
         segments: { orderBy: asc(s.transcriptSegments.seq), columns: { seq: true, participantId: true, speakerName: true, startMs: true, endMs: true, text: true } },
@@ -48,6 +43,7 @@ export async function meetingDetail(id: string) {
         actionItems: { orderBy: asc(s.actionItems.sortOrder), with: { assignee: { columns: { name: true, color: true } } } },
         clips: { orderBy: desc(s.clips.createdAt) },
         knowledge: { columns: { knowledge: true } },
+        calendarEvent: { columns: { id: true, agenda: true, attachments: true, meetingUrl: true } },
       },
     }),
     db.query.templates.findMany({ orderBy: asc(s.templates.sortOrder), columns: { id: true, name: true, description: true } }),
@@ -74,6 +70,16 @@ export async function calendar(userId: string, fromDays = -7, toDays = 14) {
   });
 }
 
+export async function eventAttachment(eventId: string, idx: number, userId: string) {
+  const e = await getDb().query.calendarEvents.findFirst({ where: and(eq(s.calendarEvents.id, eventId), eq(s.calendarEvents.userId, userId)) });
+  const a = e?.attachments[idx];
+  return e && a ? { event: e, attachment: a } : null;
+}
+
+export async function calendarEvent(eventId: string, userId: string) {
+  return getDb().query.calendarEvents.findFirst({ where: and(eq(s.calendarEvents.id, eventId), eq(s.calendarEvents.userId, userId)), with: { meeting: { columns: { id: true } } } });
+}
+
 export async function clipBySlug(slug: string) {
   const db = getDb();
   const clip = await db.query.clips.findFirst({
@@ -89,9 +95,11 @@ export async function clipBySlug(slug: string) {
   return { clip, segments };
 }
 
-export async function seededMeetings() {
+/** The demo workspace's recorded calls, offered to everyone as sample replays. */
+export async function sampleMeetings() {
+  const demo = getDb().select({ id: s.users.id }).from(s.users).where(eq(s.users.email, process.env.DEMO_USER_EMAIL ?? "maya@driftwood.example"));
   return getDb().query.meetings.findMany({
-    where: and(eq(s.meetings.status, "ready"), exists(getDb().select().from(s.transcriptSegments).where(eq(s.transcriptSegments.meetingId, s.meetings.id)))),
+    where: and(eq(s.meetings.status, "ready"), inArray(s.meetings.ownerId, demo), sql`${s.meetings.simulatedFromId} IS NULL`),
     columns: { id: true, title: true, durationMs: true, simulatedFromId: true },
     orderBy: desc(s.meetings.durationMs),
   });

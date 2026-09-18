@@ -16,6 +16,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
+  attachmentSchema,
   attendeeSchema,
   chunkNotesSchema,
   meetingKnowledgeSchema,
@@ -74,6 +75,8 @@ const calendarEventFixture = z.object({
   durationMin: z.number().int().positive(),
   platform,
   attendees: z.array(attendeeSchema).default([]),
+  agenda: z.string().optional(),
+  attachments: z.array(attachmentSchema).default([]),
   recordEnabled: z.boolean().default(true),
 });
 

@@ -3,10 +3,12 @@
  * model. Everything produced here is stored with promptVersion "simulated" so it
  * is never mistaken for real model output, and is replaced once a token exists.
  */
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { Database } from "../db";
 import * as s from "../db/schema";
 import type { MeetingKnowledge, SummaryContent, TemplateSection } from "../db/json-types";
+import { extractiveNotes } from "./extractive";
+import type { Seg } from "./windows";
 
 export const SIMULATED = "simulated";
 
@@ -72,4 +74,21 @@ export async function applySimulatedOutputs(db: Database, meetingId: string) {
     }
   });
   return { copied: true };
+}
+
+/** No model, not a replay: rule-based meeting record and action items from the transcript itself. */
+export async function applyExtractiveOutputs(db: Database, meetingId: string) {
+  const m = await db.query.meetings.findFirst({ where: eq(s.meetings.id, meetingId), with: { participants: true } });
+  const segs = (await db.select().from(s.transcriptSegments).where(eq(s.transcriptSegments.meetingId, meetingId)).orderBy(asc(s.transcriptSegments.seq))) as Seg[];
+  const { knowledge, actions } = extractiveNotes(segs);
+  const byName = new Map(m!.participants.map((p) => [p.name, p.id]));
+  await db.transaction(async (tx) => {
+    await tx.insert(s.meetingKnowledge).values({ meetingId, promptVersion: SIMULATED, transcriptHash: m!.transcriptHash ?? "", knowledge, model: "rules" }).onConflictDoNothing();
+    if (actions.length) {
+      await tx.insert(s.actionItems).values(actions.map((a, i) => ({
+        meetingId, text: a.text, assigneeName: a.owner, assigneeParticipantId: a.owner ? (byName.get(a.owner) ?? null) : null,
+        sourceSeqs: a.seqs, sourceStartMs: a.startMs, evidenceQuote: a.quote, verified: true, sortOrder: i,
+      })));
+    }
+  });
 }

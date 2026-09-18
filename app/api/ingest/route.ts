@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { badRequest, errorResponse, jsonError } from "@/http";
 import { drainMeeting } from "@/jobs";
-import { appendLines, endCall, ingestSchema, startSimulation } from "@/live";
+import { appendLines, endCall, ingestSchema, startMic, startSimulation } from "@/live";
+import { currentUserId, findUser } from "@/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,11 @@ export async function POST(req: Request) {
   const input = parsed.data;
   const db = getDb();
   try {
-    if (input.op === "start") return Response.json(await startSimulation(db, input), { status: 201 });
+    if (input.op === "start" || input.op === "start_mic") {
+      const me = await findUser(await currentUserId());
+      if (!me) return jsonError(401, "no workspace session; open / first");
+      return Response.json(input.op === "start" ? await startSimulation(db, me.id, input) : await startMic(db, me, input), { status: 201 });
+    }
     const result = input.op === "append" ? await appendLines(db, input) : await endCall(db, input);
     // Window processing runs after the response is sent; the client never waits on the model.
     if (result.queued > 0) {

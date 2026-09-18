@@ -4,6 +4,7 @@ import { closedWindows, type Seg } from "./ai/windows";
 import type { Database } from "./db";
 import * as s from "./db/schema";
 import type { MeetingStats } from "./db/json-types";
+import { SPEAKER_COLORS } from "./lib/colors";
 import { participantTotals, transcriptHash, wordCount } from "./lib/transcript";
 
 export class HttpError extends Error {
@@ -16,6 +17,13 @@ const speed = z.int().min(1).max(60);
 const ms = z.int().min(0);
 export const ingestSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("start"), sourceMeetingId: z.uuid(), speed }),
+  /** A real call recorded from the browser mic (Web Speech API); participants are who might speak. */
+  z.object({
+    op: z.literal("start_mic"),
+    title: z.string().trim().min(1).max(160),
+    participants: z.array(z.string().trim().min(1).max(60)).min(1).max(8),
+    calendarEventId: z.uuid().optional(),
+  }),
   z.object({
     op: z.literal("append"),
     meetingId: z.uuid(),
@@ -50,14 +58,14 @@ async function queueWindows(db: Database, meetingId: string, callEnded: boolean)
 }
 
 /** Start replaying a seeded meeting as a new live call. */
-export async function startSimulation(db: Database, { sourceMeetingId, speed }: Extract<IngestInput, { op: "start" }>) {
+export async function startSimulation(db: Database, ownerId: string, { sourceMeetingId, speed }: Extract<IngestInput, { op: "start" }>) {
   const src = await db.query.meetings.findFirst({ where: eq(s.meetings.id, sourceMeetingId), with: { participants: true } });
   if (!src) throw new HttpError(404, "source meeting not found");
   return db.transaction(async (tx) => {
     const [m] = await tx
       .insert(s.meetings)
       .values({
-        ownerId: src.ownerId, title: src.title, meetingType: src.meetingType, platform: src.platform, defaultTemplateId: src.defaultTemplateId,
+        ownerId, title: src.title, meetingType: src.meetingType, platform: src.platform, defaultTemplateId: src.defaultTemplateId,
         status: "live", startedAt: new Date(), simulatedFromId: src.id, liveClockMs: 0, liveSpeed: speed, liveUpdatedAt: new Date(),
       })
       .returning({ id: s.meetings.id });
@@ -65,6 +73,29 @@ export async function startSimulation(db: Database, { sourceMeetingId, speed }: 
       .insert(s.meetingParticipants)
       .values(src.participants.map(({ id: _, meetingId: __, talkMs: ___, wordCount: ____, ...p }) => ({ ...p, meetingId: m!.id })))
       .returning({ speakerIdx: s.meetingParticipants.speakerIdx, name: s.meetingParticipants.name, color: s.meetingParticipants.color });
+    return { meetingId: m!.id, participants: participants.sort((a, b) => a.speakerIdx - b.speakerIdx) };
+  });
+}
+
+export async function startMic(db: Database, owner: { id: string; name: string; email: string }, input: Extract<IngestInput, { op: "start_mic" }>) {
+  const event = input.calendarEventId
+    ? await db.query.calendarEvents.findFirst({ where: and(eq(s.calendarEvents.id, input.calendarEventId), eq(s.calendarEvents.userId, owner.id)), with: { meeting: { columns: { id: true } } } })
+    : undefined;
+  return db.transaction(async (tx) => {
+    const [m] = await tx
+      .insert(s.meetings)
+      .values({
+        ownerId: owner.id, title: input.title, platform: event?.platform ?? "google_meet", status: "live", startedAt: new Date(),
+        calendarEventId: event && !event.meeting ? event.id : null, liveClockMs: 0, liveSpeed: 1, liveUpdatedAt: new Date(),
+      })
+      .returning({ id: s.meetings.id });
+    const participants = await tx
+      .insert(s.meetingParticipants)
+      .values(input.participants.map((name, i) => ({
+        meetingId: m!.id, name, speakerIdx: i, color: SPEAKER_COLORS[i % SPEAKER_COLORS.length]!,
+        userId: i === 0 ? owner.id : null, email: i === 0 ? owner.email : null,
+      })))
+      .returning({ id: s.meetingParticipants.id, speakerIdx: s.meetingParticipants.speakerIdx, name: s.meetingParticipants.name, color: s.meetingParticipants.color });
     return { meetingId: m!.id, participants: participants.sort((a, b) => a.speakerIdx - b.speakerIdx) };
   });
 }

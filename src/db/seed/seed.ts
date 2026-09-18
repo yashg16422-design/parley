@@ -13,13 +13,13 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import type { Database } from "../index";
 import * as s from "../schema";
 import type { MeetingStats } from "../json-types";
+import { SPEAKER_COLORS } from "../../lib/colors";
 import { stableId } from "../../lib/stable-id";
 import { isGrounded, participantTotals, transcriptHash, wordCount } from "../../lib/transcript";
 import { type Dataset, type MeetingFixture, resolveDate, resolveRelativeTime } from "./fixtures";
 
 const BATCH = 500;
 
-const SPEAKER_COLORS = ["#6366F1", "#10B981", "#F59E0B", "#EF4444", "#0EA5E9", "#A855F7", "#EC4899", "#14B8A6"];
 
 /** Tables in dependency order; TRUNCATE ... CASCADE handles FKs anyway. */
 const ALL_TABLES = [
@@ -307,6 +307,8 @@ export function buildRows(data: Dataset, now = new Date()) {
       platform: e.platform,
       meetingUrl: meetingUrl(e.platform, e.key),
       attendees: e.attendees,
+      agenda: e.agenda ?? e.description ?? null,
+      attachments: e.attachments,
       recordEnabled: e.recordEnabled,
     };
   });

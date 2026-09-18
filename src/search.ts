@@ -64,8 +64,12 @@ export async function expandQuery(db: Database, q: string): Promise<string> {
   return rows<{ q: string }>(r)[0]?.q ?? "";
 }
 
+/** Meetings a user recorded or attended. */
+const visibleTo = (userId: string) =>
+  sql`(m.owner_id = ${userId} OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting_id = m.id AND p.user_id = ${userId}))`;
+
 /** Ranked, highlighted transcript search across meetings, with synonym expansion. */
-export async function searchTranscripts(db: Database, q: string, { ownerId, limit = 25 }: { ownerId?: string; limit?: number } = {}) {
+export async function searchTranscripts(db: Database, q: string, { userId, limit = 25 }: { userId?: string; limit?: number } = {}) {
   const r = await db.execute(sql`
     WITH q AS (SELECT ts_rewrite(websearch_to_tsquery('english', ${q}), ${RULES}) AS tsq)
     SELECT s.meeting_id AS "meetingId", m.title, m.started_at AS "startedAt", s.seq, s.start_ms AS "startMs",
@@ -73,8 +77,43 @@ export async function searchTranscripts(db: Database, q: string, { ownerId, limi
            ts_headline('english', s.text, q.tsq, ${HEADLINE}) AS snippet,
            ts_rank(s.search, q.tsq) AS rank
     FROM q, transcript_segments s JOIN meetings m ON m.id = s.meeting_id
-    WHERE s.search @@ q.tsq ${ownerId ? sql`AND m.owner_id = ${ownerId}` : sql``}
+    WHERE s.search @@ q.tsq ${userId ? sql`AND ${visibleTo(userId)}` : sql``}
     ORDER BY rank DESC, m.started_at DESC NULLS LAST
     LIMIT ${limit}`);
   return rows<Omit<SearchHit, "parts"> & { snippet: string }>(r).map(({ snippet, ...h }) => ({ ...h, parts: toParts(snippet) }));
+}
+
+export type EventHit = {
+  id: string;
+  title: string;
+  startsAt: Date;
+  meetingUrl: string;
+  meetingId: string | null;
+  attachments: { title: string }[];
+  parts: SearchHit["parts"];
+};
+
+/** Calendar search over titles, agendas and attachment titles (same synonym expansion). */
+export async function searchEvents(db: Database, q: string, userId: string, limit = 10) {
+  const r = await db.execute(sql`
+    WITH q AS (SELECT ts_rewrite(websearch_to_tsquery('english', ${q}), ${RULES}) AS tsq)
+    SELECT e.id, e.title, e.starts_at AS "startsAt", e.meeting_url AS "meetingUrl", m.id AS "meetingId", e.attachments,
+           ts_headline('english', concat_ws(' · ', e.agenda, (SELECT string_agg(a->>'title', ' · ') FROM jsonb_array_elements(e.attachments) a)), q.tsq, ${HEADLINE}) AS snippet
+    FROM q, calendar_events e LEFT JOIN meetings m ON m.calendar_event_id = e.id
+    WHERE e.user_id = ${userId} AND e.search @@ q.tsq
+    ORDER BY ts_rank(e.search, q.tsq) DESC, e.starts_at DESC
+    LIMIT ${limit}`);
+  return rows<Omit<EventHit, "parts"> & { snippet: string }>(r).map(({ snippet, ...e }) => ({ ...e, parts: toParts(snippet) }));
+}
+
+/** Everything the search page shows for one query, scoped to a user. */
+export async function searchFor(db: Database, userId: string, query: string, limit = 25) {
+  const [hits, events, expanded] = await Promise.all([searchTranscripts(db, query, { userId, limit }), searchEvents(db, query, userId), expandQuery(db, query)]);
+  return {
+    query,
+    expanded,
+    events,
+    meetings: new Set(hits.map((h) => h.meetingId)).size,
+    hits: hits.map((h) => ({ ...h, href: `/meetings/${h.meetingId}?t=${h.startMs}#line-${h.seq}` })),
+  };
 }

@@ -15,6 +15,13 @@
       "when": 1789768579289,
       "tag": "0001_live_simulation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789771443465,
+      "tag": "0002_calendar_details",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Loader2, Search } from "lucide-react";
+import { CalendarDays, Loader2, Search } from "lucide-react";
 import { searchAction, type SearchResult } from "@app/actions/search";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,21 @@ export function SearchView({ initial }: { initial: string }) {
       {res && !res.ok && <p className="text-sm text-destructive">{res.error}</p>}
       {res?.ok && (
         <>
-          <p className="text-xs text-muted-foreground">{res.hits.length} moments in {res.meetings} meetings{res.expanded.includes("|") && <> · also matching synonyms (<code className="text-[11px]">{res.expanded}</code>)</>}</p>
+          <p className="text-xs text-muted-foreground">{res.hits.length} moments in {res.meetings} meetings{res.events.length ? `, ${res.events.length} calendar events` : ""}{res.expanded.includes("|") && <> · also matching synonyms (<code className="text-[11px]">{res.expanded}</code>)</>}</p>
+          {res.events.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Calendar, agendas & files</h2>
+              {res.events.map((e) => (
+                <Link key={e.id} href={e.meetingId ? `/meetings/${e.meetingId}` : "/calendar"}>
+                  <Card className="gap-1 p-3 transition-colors hover:border-primary/50 hover:bg-muted/30">
+                    <div className="flex items-center gap-2 text-sm font-medium"><CalendarDays className="size-4 text-primary" />{e.title}<span className="ml-auto text-xs font-normal text-muted-foreground">{fmtDay(new Date(e.startsAt))}</span></div>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">{e.parts.map((p, i) => (p.hit ? <mark key={i} className="rounded bg-primary/15 px-0.5 text-foreground">{p.text}</mark> : <span key={i}>{p.text}</span>))}</p>
+                  </Card>
+                </Link>
+              ))}
+              <h2 className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transcripts</h2>
+            </div>
+          )}
           <div className="space-y-2">
             {res.hits.map((h) => (
               <Link key={`${h.meetingId}-${h.seq}`} href={h.href}>

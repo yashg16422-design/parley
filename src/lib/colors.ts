@@ -1,0 +1,1 @@
+export const SPEAKER_COLORS = ["#6366F1", "#10B981", "#F59E0B", "#EF4444", "#0EA5E9", "#A855F7", "#EC4899", "#14B8A6"];

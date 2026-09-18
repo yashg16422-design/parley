@@ -1,5 +1,5 @@
 import { eq, inArray, sql } from "drizzle-orm";
-import { applySimulatedOutputs } from "./ai/simulated";
+import { applyExtractiveOutputs, applySimulatedOutputs } from "./ai/simulated";
 import { hfClient, type LlmClient } from "./ai/llm";
 import { processMeeting, processWindows } from "./ai/pipeline";
 import type { Database } from "./db";
@@ -33,7 +33,7 @@ export async function drainMeeting(db: Database, meetingId: string, llm: LlmClie
   try {
     if (!llm) {
       if (final) {
-        await applySimulatedOutputs(db, meetingId);
+        if (!(await applySimulatedOutputs(db, meetingId)).copied) await applyExtractiveOutputs(db, meetingId);
         await db.update(s.meetings).set({ status: "ready" }).where(eq(s.meetings.id, meetingId));
       }
     } else if (final) await processMeeting(db, meetingId, { llm });

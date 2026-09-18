@@ -18,6 +18,15 @@ export const attendeeSchema = z.object({
 });
 export type Attendee = z.infer<typeof attendeeSchema>;
 
+/** A file on a calendar event. `body` is set for seeded briefs rendered in-app. */
+export const attachmentSchema = z.object({
+  title: z.string(),
+  kind: z.enum(["pdf", "doc", "sheet", "slides", "link"]),
+  url: z.string(),
+  body: z.string().optional(),
+});
+export type Attachment = z.infer<typeof attachmentSchema>;
+
 /** Computed once when a meeting is finalised, so dashboards never aggregate. */
 export const meetingStatsSchema = z.object({
   durationMs: z.number().int(),

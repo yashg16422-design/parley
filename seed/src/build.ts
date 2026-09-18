@@ -25,6 +25,7 @@ import { isGrounded, wordCount } from "../../src/lib/transcript";
 import { type Cited, expandScript, type MeetingSource } from "./dsl";
 import { meetings as sources } from "./meetings";
 import { templates } from "./templates";
+import { eventDetails } from "./event-details";
 import { calendarConnections, upcomingEvents, users } from "./workspace";
 
 const OUT = path.resolve("seed/fixtures");
@@ -390,6 +391,8 @@ function compileMeeting(m: MeetingSource) {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  const unknownDetails = Object.keys(eventDetails).filter((k) => !sources.some((m) => m.key === k) && !upcomingEvents.some((e) => e.key === k));
+  if (unknownDetails.length) throw new Error(`event details for unknown events: ${unknownDetails.join(", ")}`);
   const keys = new Set<string>();
   for (const m of sources) {
     if (keys.has(m.key)) throw new Error(`duplicate meeting key ${m.key}`);
@@ -411,7 +414,7 @@ async function main() {
     users,
     calendarConnections,
     templates,
-    calendarEvents: [...compiled.map((c) => c.event), ...upcomingEvents],
+    calendarEvents: [...compiled.map((c) => c.event), ...upcomingEvents].map((e) => ({ ...e, ...eventDetails[e.key] })),
   };
 
   // Validate the full dataset exactly as db:seed will, before writing anything.
