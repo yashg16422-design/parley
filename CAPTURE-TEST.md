@@ -87,8 +87,8 @@ The timestamps are in UTC (`20:04Z`), while the file times are local (`01:34` on
    `SessionStart` and `UserPromptSubmit` still fired, proving project hooks load in a new
    session, but `Stop` never ran. That half-log is kept as-is:
    `.agent-logs/2026-09-18_19-57-22_b6577dc1-a141-4276-9736-adf1f09bc42f.md`
-   (one PROMPT, no RESPONSE, `model: unknown`). The real second session was then started
-   by me from the desktop app.
+   (one PROMPT, no RESPONSE, `model: unknown`). The real second session was then opened
+   manually as a new Code session in the desktop app.
 2. **`model: unknown` on a session's first prompt.** `SessionStart`'s input has no `model`
    field in this version, and there is no assistant message in the transcript yet at
    first-prompt time. Fix: the `Stop` hook of the same turn fills in that one
