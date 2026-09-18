@@ -1,33 +1,33 @@
+import { PGlite } from "@electric-sql/pglite";
 import { Pool } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import * as schema from "./schema";
 
-/**
- * Any Drizzle Postgres database carrying our schema. Neon in the app, PGlite in
- * the local schema check - code that takes a db (seed, jobs) accepts either.
- */
+/** Any Drizzle Postgres database carrying our schema (Neon in prod, PGlite locally and in checks). */
 export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 
+type Client = { db: Database; close: () => Promise<void> };
+
 /**
- * Neon's WebSocket driver (not neon-http) because we need interactive
- * transactions: the seed runs in one, and job claiming uses
- * SELECT ... FOR UPDATE SKIP LOCKED. Node >= 22 ships a global WebSocket, so no
- * `ws` polyfill is needed.
+ * `postgres://...` -> Neon's WebSocket driver (interactive transactions, SKIP LOCKED).
+ * `pglite:./.pglite` -> embedded file-backed Postgres, for local dev without Neon.
  */
-function createDb(url: string) {
+function createDb(url: string): Client {
+  if (url.startsWith("pglite:")) {
+    const pg = new PGlite(url.slice("pglite:".length) || undefined);
+    return { db: drizzlePglite({ client: pg, schema }), close: () => pg.close() };
+  }
   const pool = new Pool({ connectionString: url });
-  return { pool, db: drizzle({ client: pool, schema }) };
+  return { db: drizzleNeon({ client: pool, schema }), close: () => pool.end() };
 }
 
-type Client = ReturnType<typeof createDb>;
-
-// Reuse one pool across hot reloads in dev and across invocations on a warm
-// serverless instance.
+// One client across hot reloads in dev and invocations on a warm serverless instance.
 const globalForDb = globalThis as unknown as { __fathomDb?: Client };
 
 /** Lazily connected so importing this module never throws at build time. */
-export function getDb(): Client["db"] {
+export function getDb(): Database {
   if (!globalForDb.__fathomDb) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set (see .env.example)");
@@ -37,7 +37,7 @@ export function getDb(): Client["db"] {
 }
 
 export async function closeDb() {
-  await globalForDb.__fathomDb?.pool.end();
+  await globalForDb.__fathomDb?.close();
   globalForDb.__fathomDb = undefined;
 }
 

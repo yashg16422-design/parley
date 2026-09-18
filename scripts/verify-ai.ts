@@ -14,6 +14,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { modelChunkNotes } from "../src/ai/ground";
 import { extractJson, type LlmClient } from "../src/ai/llm";
 import { processMeeting, processWindows } from "../src/ai/pipeline";
+import { drainMeeting } from "../src/jobs";
 import { closedWindows, planWindows, type Seg } from "../src/ai/windows";
 import * as s from "../src/db/schema";
 import { loadFixtures } from "../src/db/seed/fixtures";
@@ -145,6 +146,34 @@ async function main() {
   assert.equal((await db.query.meetings.findFirst({ where: eq(s.meetings.id, otherId) }))?.status, "failed");
   console.log("✓ invalid model output fails the meeting instead of storing junk");
 
+  // Job queue: a failing model re-queues with backoff, then fails for good at max_attempts.
+  // (13.6-minute interview: its first window is closed while "live", so a model call happens.)
+  const retryId = stableId("meeting:interview-backend-jordan");
+  await db.insert(s.processingJobs).values({ key: "chunk:retry-test", meetingId: retryId, kind: "chunk_notes" });
+  const jobState = async () => (await db.query.processingJobs.findFirst({ where: eq(s.processingJobs.key, "chunk:retry-test") }))!;
+  for (let i = 1; i <= 3; i++) {
+    assert.ok((await drainMeeting(db, retryId, junk)).error);
+    const j = await jobState();
+    assert.deepEqual([j.attempts, j.status], [i, i < 3 ? "queued" : "failed"]);
+    assert.ok(j.runAfter > new Date() && /failed validation/.test(j.lastError ?? ""));
+    await db.update(s.processingJobs).set({ runAfter: new Date(0) }).where(eq(s.processingJobs.key, "chunk:retry-test"));
+  }
+  assert.deepEqual(await drainMeeting(db, retryId, junk), { ran: 0 }, "failed jobs are not picked up again");
+  console.log("✓ job queue: model failure re-queued with backoff twice, then marked failed");
+
+  // Search Server Action, through the same getDb() the app uses.
+  process.env.DATABASE_URL = "pglite:";
+  const { getDb } = await import("../src/db");
+  const appDb = getDb();
+  await migrate(appDb as never, { migrationsFolder: "drizzle" });
+  await seed(appDb, (await loadFixtures("seed/fixtures")).dataset);
+  const { searchAction } = await import("../app/actions/search");
+  const res = await searchAction({ query: "single sign-on", limit: 100 });
+  assert.ok(res.ok && res.meetings >= 10 && /'sso'/.test(res.expanded));
+  assert.ok(res.hits.every((h) => h.href === `/meetings/${h.meetingId}?t=${h.startMs}#line-${h.seq}`));
+  assert.deepEqual(await searchAction({ query: "   " }), { ok: false, error: "Too small: expected string to have >=1 characters" });
+  console.log(`✓ searchAction: ${res.hits.length} cited hits across ${res.meetings} meetings; empty query rejected`);
+
   // Synonym search.
   assert.match(await expandQuery(db, "single sign-on"), /'sso'/);
   const meetingsFor = async (q: string) => new Set((await searchTranscripts(db, q, { limit: 1000 })).map((h) => h.meetingId)).size;
@@ -152,7 +181,7 @@ async function main() {
   assert.ok(sso >= 10 && longForm === sso && saml === sso, `SSO ${sso}, single sign-on ${longForm}, SAML ${saml}`);
   assert.ok(both > 0 && both < sso, "other query terms still narrow the search");
   const hits = await searchTranscripts(db, "single sign-on", { ownerId: stableId("user:aisha@driftwood.example") });
-  assert.ok(hits.length > 0 && hits.every((h) => /<b>/.test(h.snippet)), "owner filter + highlighted snippets");
+  assert.ok(hits.length > 0 && hits.every((h) => h.parts.some((p) => p.hit) && !h.parts.some((p) => /[\u0002\u0003<]/.test(p.text))), "owner filter + safe highlighted parts");
   console.log(`✓ search: "single sign-on" ${longForm} meetings (was 2), "SSO" ${sso}, "SAML" ${saml}, "SSO timeline" ${both}`);
 
   await client.close();

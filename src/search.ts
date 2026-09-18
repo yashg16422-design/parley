@@ -43,9 +43,20 @@ export type SearchHit = {
   seq: number;
   startMs: number;
   speakerName: string;
-  snippet: string;
+  /** Snippet as plain-text parts; `hit` marks matched terms. Render as text, never as HTML. */
+  parts: { text: string; hit: boolean }[];
   rank: number;
 };
+
+// Control characters can't occur in transcript text, so they're safe match markers.
+const [ON, OFF] = ["\u0002", "\u0003"];
+const HEADLINE = `StartSel=${ON},StopSel=${OFF},MaxFragments=1,MinWords=6,MaxWords=20`;
+
+const toParts = (snippet: string) =>
+  snippet.split(ON).flatMap((chunk, i) => {
+    const [hit, rest = ""] = i === 0 ? ["", chunk] : chunk.split(OFF);
+    return [...(hit ? [{ text: hit, hit: true }] : []), ...(rest ? [{ text: rest, hit: false }] : [])];
+  });
 
 /** The tsquery a search actually runs, after synonym expansion (handy for debugging). */
 export async function expandQuery(db: Database, q: string): Promise<string> {
@@ -59,11 +70,11 @@ export async function searchTranscripts(db: Database, q: string, { ownerId, limi
     WITH q AS (SELECT ts_rewrite(websearch_to_tsquery('english', ${q}), ${RULES}) AS tsq)
     SELECT s.meeting_id AS "meetingId", m.title, m.started_at AS "startedAt", s.seq, s.start_ms AS "startMs",
            s.speaker_name AS "speakerName",
-           ts_headline('english', s.text, q.tsq, 'MaxFragments=1,MinWords=6,MaxWords=20') AS snippet,
+           ts_headline('english', s.text, q.tsq, ${HEADLINE}) AS snippet,
            ts_rank(s.search, q.tsq) AS rank
     FROM q, transcript_segments s JOIN meetings m ON m.id = s.meeting_id
     WHERE s.search @@ q.tsq ${ownerId ? sql`AND m.owner_id = ${ownerId}` : sql``}
     ORDER BY rank DESC, m.started_at DESC NULLS LAST
     LIMIT ${limit}`);
-  return rows<SearchHit>(r);
+  return rows<Omit<SearchHit, "parts"> & { snippet: string }>(r).map(({ snippet, ...h }) => ({ ...h, parts: toParts(snippet) }));
 }

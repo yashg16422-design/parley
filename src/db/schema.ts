@@ -13,6 +13,7 @@
  */
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -182,6 +183,11 @@ export const meetings = pgTable(
     /** sha256 of the finalized transcript; AI caches key off it. */
     transcriptHash: text("transcript_hash"),
     search: tsvector("search").generatedAlwaysAs(sql`to_tsvector('english', coalesce(title, ''))`),
+    /** Live simulation: seeded meeting being replayed, and the replay clock. */
+    simulatedFromId: uuid("simulated_from_id").references((): AnyPgColumn => meetings.id, { onDelete: "set null" }),
+    liveClockMs: integer("live_clock_ms"),
+    liveSpeed: smallint("live_speed"),
+    liveUpdatedAt: timestamp("live_updated_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
