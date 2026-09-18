@@ -3,7 +3,8 @@
  *
  * Applies drizzle/ migrations to an in-memory Postgres (PGlite), runs the real
  * seed on a small smoke dataset, and asserts the schema behaves: relations,
- * search indexes, range queries, constraints, deterministic re-seed.
+ * search indexes, range queries, constraints, deterministic re-seed. Then loads
+ * the real seed/fixtures the same way db:seed does and sanity-checks them.
  * Needs no DATABASE_URL - runs anywhere, including CI.
  */
 import assert from "node:assert/strict";
@@ -12,7 +13,7 @@ import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "../src/db/schema";
-import { datasetSchema, type DatasetInput } from "../src/db/seed/fixtures";
+import { datasetSchema, type DatasetInput, loadFixtures } from "../src/db/seed/fixtures";
 import { seed } from "../src/db/seed/seed";
 import { stableId } from "../src/lib/stable-id";
 
@@ -140,6 +141,27 @@ async function main() {
   const same = await db.query.clips.findFirst({ where: eq(schema.clips.slug, "pricing-pain") });
   assert.equal(same?.id, stableId("clip:pricing-pain"), "ids stable across re-seeds");
   console.log("✓ cascade delete, idempotent + deterministic re-seed");
+
+  // The real fixtures: load them exactly as db:seed would, into this database.
+  const { dataset, files } = await loadFixtures("seed/fixtures");
+  if (files.length) {
+    const t0 = performance.now();
+    const real = await seed(db, dataset);
+    const ms = Math.round(performance.now() - t0);
+    const [{ n }] = (await db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM transcript_segments`)).rows as [{ n: number }];
+    assert.equal(n, real.transcriptSegments);
+    assert.equal(real.unverifiedActionItems, 0, "every AI action item in the fixtures must be grounded");
+    const hero = await db.query.meetings.findFirst({ where: eq(schema.meetings.id, stableId("meeting:q4-product-alignment")) });
+    assert.ok(hero && hero.durationMs >= 59 * 60_000 && hero.stats?.speakerCount === 8, "hero meeting is 8 speakers, ~60 min");
+    const upcoming = await db.select().from(schema.calendarEvents).where(gt(schema.calendarEvents.startsAt, new Date()));
+    assert.ok(upcoming.length >= 20, "calendar has plenty of upcoming events");
+    const sso = await db.execute(sql`
+      SELECT DISTINCT meeting_id FROM transcript_segments
+      WHERE search @@ websearch_to_tsquery('english', 'SSO')`);
+    assert.ok(sso.rows.length >= 5, "cross-meeting search finds the SSO thread in several meetings");
+    console.log(`✓ real fixtures: ${files.length} files seeded in ${ms}ms`, real);
+    console.log(`  upcoming events: ${upcoming.length}, meetings mentioning "SSO": ${sso.rows.length}`);
+  }
 
   await client.close();
   console.log("\nSchema verified.");

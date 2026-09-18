@@ -1,24 +1,8 @@
-import { defineMeeting, type Line } from "../../dsl";
+import { defineMeeting } from "../../dsl";
 import { D, staff } from "../../workspace";
 import { inserts } from "./extras";
 import { part1 } from "./part1";
 import { part2 } from "./part2";
-
-/** Splice each extra scene in right after the line carrying its anchor tag. */
-function withInserts(lines: Line[]): Line[] {
-  const used = new Set<string>();
-  const out = lines.flatMap((l) => {
-    const t = Array.isArray(l) ? l[2] : undefined;
-    if (t && inserts[t]) {
-      used.add(t);
-      return [l, ...inserts[t]];
-    }
-    return [l];
-  });
-  const unused = Object.keys(inserts).filter((k) => !used.has(k));
-  if (unused.length) throw new Error(`q4-alignment: insert anchors not found: ${unused.join(", ")}`);
-  return out;
-}
 
 /** The hero meeting: 8 speakers, exactly one hour. */
 export default defineMeeting({
@@ -42,7 +26,8 @@ export default defineMeeting({
     aisha: staff("aisha"),
     daniel: staff("daniel"),
   },
-  script: withInserts([...part1, ...part2]),
+  script: [...part1, ...part2],
+  inserts,
 
   highlights: [
     { at: "pilot-quote", label: "Pilot customer: 'first time the tool told me something I didn't know'", by: "elena" },

@@ -8,8 +8,9 @@
  * Per meeting it:
  *  1. times every turn from per-speaker speaking rates (seeded PRNG), with
  *     natural gaps, cross-talk overlaps and explicit pauses;
- *  2. splits long turns into transcriber-sized segments (<= ~32 words);
- *  3. optionally rescales to an exact target length (the hour-long call);
+ *  2. splits turns into sentence-level segments, like a transcriber would;
+ *  3. optionally stretches the silences between turns (never the speech) to
+ *     hit an exact target length, and fails below a 110 wpm realism floor;
  *  4. resolves tags -> seqs for highlights, clips, action items, knowledge and
  *     summaries, and fails the build if an action item's quote isn't grounded;
  *  5. derives the "general" template summary and per-window chunk notes from
@@ -21,7 +22,7 @@ import type { ChunkNotes, MeetingKnowledge, SummaryContent } from "../../src/db/
 import { datasetSchema, type DatasetInput } from "../../src/db/seed/fixtures";
 import { buildRows, countRows } from "../../src/db/seed/seed";
 import { isGrounded, wordCount } from "../../src/lib/transcript";
-import type { Cited, MeetingSource } from "./dsl";
+import { type Cited, expandScript, type MeetingSource } from "./dsl";
 import { meetings as sources } from "./meetings";
 import { templates } from "./templates";
 import { calendarConnections, upcomingEvents, users } from "./workspace";
@@ -33,6 +34,8 @@ const CHUNK_MS = 10 * 60_000;
 const MAX_SEGMENT_WORDS = 28;
 /** Below this, a meeting reads as people talking in slow motion - fail the build. */
 const MIN_WPM = 110;
+/** A non-standup recording must fill at least this share of its calendar slot. */
+const MIN_SLOT_FILL = 0.3;
 /** Most extra silence we'll insert between turns to hit a target length. */
 const MAX_ADDED_GAP_MS = 2500;
 
@@ -71,7 +74,8 @@ interface Seg {
 
 /** One segment per sentence, like a transcriber; very short sentences merge forward. */
 function splitTurn(text: string): string[] {
-  const sentences = text.match(/[^.!?]+(?:[.!?]+["')\]]*|$)\s*/g)?.map((s) => s.trim()).filter(Boolean) ?? [text];
+  // A sentence ends at .!? (plus closing quotes) followed by whitespace - so "2.0" and "$1.80" stay intact.
+  const sentences = text.split(/(?<=[.!?]["')\]]*)\s+/).map((s) => s.trim()).filter(Boolean);
   const chunks: string[] = [];
   let cur = "";
   for (const s of sentences) {
@@ -105,7 +109,7 @@ function timeScript(m: MeetingSource) {
   let lastText = "";
   let gapIdx = 0;
 
-  for (const line of m.script) {
+  for (const line of expandScript(m)) {
     if (!Array.isArray(line)) {
       cursor += line.pause;
       continue;
@@ -358,6 +362,13 @@ function compileMeeting(m: MeetingSource) {
   const words = segs.reduce((n, s) => n + wordCount(s.text), 0);
   const wpm = words / (durationMs / 60_000);
   if (wpm < MIN_WPM) throw new Error(`${m.key}: ${Math.round(wpm)} words/min is below the ${MIN_WPM} realism floor`);
+  const fill = durationMs / (m.scheduledMin * 60_000);
+  if (m.meetingType !== "standup" && fill < MIN_SLOT_FILL) {
+    throw new Error(
+      `${m.key}: recording is ${(durationMs / 60_000).toFixed(1)} min of a ${m.scheduledMin} min slot (${Math.round(fill * 100)}%); ` +
+        `needs about ${Math.ceil(((MIN_SLOT_FILL * m.scheduledMin * 60_000 - durationMs) / 60_000) * wpm)} more words`,
+    );
+  }
   const report = {
     meeting: m.key,
     speakers: handles.length,
@@ -365,6 +376,7 @@ function compileMeeting(m: MeetingSource) {
     words,
     duration: `${Math.floor(durationMs / 60_000)}:${String(Math.round((durationMs % 60_000) / 1000)).padStart(2, "0")}`,
     wpm: Math.round(wpm),
+    slotFill: `${Math.round(fill * 100)}%`,
     addedGapMs: Math.round(addedGapMs),
     overlaps: segs.filter((s, i) => i && s.startMs < segs[i - 1]!.endMs).length,
     actions: fixture.actionItems.length,
@@ -383,7 +395,17 @@ async function main() {
     if (keys.has(m.key)) throw new Error(`duplicate meeting key ${m.key}`);
     keys.add(m.key);
   }
-  const compiled = sources.map(compileMeeting);
+  // Compile everything and report every problem at once, not just the first.
+  const errors: string[] = [];
+  const compiled = sources.flatMap((m) => {
+    try {
+      return [compileMeeting(m)];
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+      return [];
+    }
+  });
+  if (errors.length) throw new Error(`${errors.length} meeting(s) failed:\n  - ${errors.join("\n  - ")}`);
 
   const workspace: DatasetInput = {
     users,

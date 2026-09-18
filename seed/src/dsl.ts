@@ -45,6 +45,12 @@ export interface MeetingSource {
   /** Rescale timing so the recording lasts exactly this long (hour-long call). */
   targetMinutes?: number;
   script: Line[];
+  /**
+   * Extra scenes spliced in after the line tagged with the key. "@start" and
+   * "@end" prepend/append. Lets long meetings be written as a main flow plus
+   * scenes without rewriting the flow.
+   */
+  inserts?: Record<string, Line[]>;
   highlights?: { at: string; label: string; by?: string }[];
   actionItems?: {
     text: string;
@@ -71,3 +77,35 @@ export interface MeetingSource {
 }
 
 export const defineMeeting = (m: MeetingSource) => m;
+
+/**
+ * Resolve `inserts` into a flat script; every anchor must exist. Anchors may be
+ * tags on inserted lines too, so a scene can hang off another scene.
+ */
+export function expandScript(m: MeetingSource): Line[] {
+  const inserts = m.inserts ?? {};
+  const used = new Set<string>();
+  const out: Line[] = [];
+  const emit = (l: Line) => {
+    out.push(l);
+    const t = Array.isArray(l) ? l[2] : undefined;
+    if (t && inserts[t] && !used.has(t)) {
+      used.add(t);
+      inserts[t].forEach(emit);
+    }
+  };
+  (inserts["@start"] ?? []).forEach(emit);
+  m.script.forEach(emit);
+  (inserts["@end"] ?? []).forEach(emit);
+  const missing = Object.keys(inserts).filter((k) => !k.startsWith("@") && !used.has(k));
+  if (missing.length) throw new Error(`${m.key}: insert anchors not found: ${missing.join(", ")}`);
+  return out;
+}
+
+/** Merge extra scenes into a meeting (appending when both define the same anchor). */
+export function withScenes(m: MeetingSource, scenes: Record<string, Line[]> | undefined): MeetingSource {
+  if (!scenes) return m;
+  const inserts = { ...(m.inserts ?? {}) };
+  for (const [k, v] of Object.entries(scenes)) inserts[k] = [...(inserts[k] ?? []), ...v];
+  return { ...m, inserts };
+}
