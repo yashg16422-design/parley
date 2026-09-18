@@ -15,7 +15,7 @@ import * as s from "../schema";
 import type { MeetingStats } from "../json-types";
 import { stableId } from "../../lib/stable-id";
 import { isGrounded, participantTotals, transcriptHash, wordCount } from "../../lib/transcript";
-import { type Dataset, type MeetingFixture, resolveRelativeTime } from "./fixtures";
+import { type Dataset, type MeetingFixture, resolveDate, resolveRelativeTime } from "./fixtures";
 
 const BATCH = 500;
 
@@ -167,7 +167,7 @@ function buildMeetingRows(m: MeetingFixture, data: Dataset, now: Date) {
     text: a.text,
     assigneeParticipantId: a.assignee === null ? null : participantIds[a.assignee]!,
     assigneeName: a.assigneeName ?? (a.assignee === null ? null : m.participants[a.assignee]!.name),
-    dueDate: a.dueDate ?? null,
+    dueDate: a.dueDate ? resolveDate(a.dueDate, now) : null,
     dueText: a.dueText ?? null,
     status: a.status,
     origin: a.origin,
@@ -176,7 +176,11 @@ function buildMeetingRows(m: MeetingFixture, data: Dataset, now: Date) {
     evidenceQuote: a.evidenceQuote ?? null,
     verified: a.origin === "manual" || isGrounded(bySeq, a.sourceSeqs, a.evidenceQuote),
     sortOrder: i,
-    completedAt: a.status === "done" && startedAt ? new Date(startedAt.getTime() + durationMs + 86_400_000) : null,
+    // Marked done "the next day", but never in the future for very recent meetings.
+    completedAt:
+      a.status === "done" && startedAt
+        ? new Date(Math.min(startedAt.getTime() + durationMs + 86_400_000, now.getTime() - 60_000))
+        : null,
   }));
 
   const stats: MeetingStats | null =
@@ -266,7 +270,8 @@ function buildMeetingRows(m: MeetingFixture, data: Dataset, now: Date) {
 // Entry point
 // ---------------------------------------------------------------------------
 
-export async function seed(db: Database, data: Dataset, now = new Date()): Promise<SeedCounts> {
+/** Validate and build every row without touching the database. */
+export function buildRows(data: Dataset, now = new Date()) {
   const errors = validateReferences(data);
   if (errors.length) throw new Error(`Fixture reference errors:\n  - ${errors.join("\n  - ")}`);
 
@@ -307,24 +312,50 @@ export async function seed(db: Database, data: Dataset, now = new Date()): Promi
   });
   const templates = data.templates.map((t) => ({ ...t }));
   const built = data.meetings.map((m) => buildMeetingRows(m, data, now));
+  return {
+    users,
+    calendarConnections: connections,
+    calendarEvents: events,
+    templates,
+    meetings: built.map((b) => b.meeting),
+    meetingParticipants: built.flatMap((b) => b.participants),
+    transcriptSegments: built.flatMap((b) => b.segments),
+    highlights: built.flatMap((b) => b.highlights),
+    actionItems: built.flatMap((b) => b.actionItems),
+    clips: built.flatMap((b) => b.clips),
+    chunkNotes: built.flatMap((b) => b.chunkNotes),
+    meetingKnowledge: built.flatMap((b) => b.knowledge),
+    summaries: built.flatMap((b) => b.summaries),
+  };
+}
 
+export type SeedRows = ReturnType<typeof buildRows>;
+
+export function countRows(rows: SeedRows): SeedCounts {
+  const counts: SeedCounts = Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, v.length]));
+  counts.unverifiedActionItems = rows.actionItems.filter((a) => !a.verified).length;
+  return counts;
+}
+
+export async function seed(db: Database, data: Dataset, now = new Date()): Promise<SeedCounts> {
+  const rows = buildRows(data, now);
   return db.transaction(async (tx) => {
     await tx.execute(sql.raw(`TRUNCATE ${ALL_TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`));
-    const counts: SeedCounts = {};
-    counts.users = await insertBatched(tx, s.users, users);
-    counts.calendarConnections = await insertBatched(tx, s.calendarConnections, connections);
-    counts.calendarEvents = await insertBatched(tx, s.calendarEvents, events);
-    counts.templates = await insertBatched(tx, s.templates, templates);
-    counts.meetings = await insertBatched(tx, s.meetings, built.map((b) => b.meeting));
-    counts.meetingParticipants = await insertBatched(tx, s.meetingParticipants, built.flatMap((b) => b.participants));
-    counts.transcriptSegments = await insertBatched(tx, s.transcriptSegments, built.flatMap((b) => b.segments));
-    counts.highlights = await insertBatched(tx, s.highlights, built.flatMap((b) => b.highlights));
-    counts.actionItems = await insertBatched(tx, s.actionItems, built.flatMap((b) => b.actionItems));
-    counts.clips = await insertBatched(tx, s.clips, built.flatMap((b) => b.clips));
-    counts.chunkNotes = await insertBatched(tx, s.chunkNotes, built.flatMap((b) => b.chunkNotes));
-    counts.meetingKnowledge = await insertBatched(tx, s.meetingKnowledge, built.flatMap((b) => b.knowledge));
-    counts.summaries = await insertBatched(tx, s.summaries, built.flatMap((b) => b.summaries));
-    counts.unverifiedActionItems = built.flatMap((b) => b.actionItems).filter((a) => !a.verified).length;
+    // Parents before children.
+    await insertBatched(tx, s.users, rows.users);
+    await insertBatched(tx, s.calendarConnections, rows.calendarConnections);
+    await insertBatched(tx, s.calendarEvents, rows.calendarEvents);
+    await insertBatched(tx, s.templates, rows.templates);
+    await insertBatched(tx, s.meetings, rows.meetings);
+    await insertBatched(tx, s.meetingParticipants, rows.meetingParticipants);
+    await insertBatched(tx, s.transcriptSegments, rows.transcriptSegments);
+    await insertBatched(tx, s.highlights, rows.highlights);
+    await insertBatched(tx, s.actionItems, rows.actionItems);
+    await insertBatched(tx, s.clips, rows.clips);
+    await insertBatched(tx, s.chunkNotes, rows.chunkNotes);
+    await insertBatched(tx, s.meetingKnowledge, rows.meetingKnowledge);
+    await insertBatched(tx, s.summaries, rows.summaries);
+    const counts = countRows(rows);
     return counts;
   });
 }

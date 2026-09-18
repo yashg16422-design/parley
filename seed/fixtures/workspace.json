@@ -1,0 +1,1573 @@
+{
+  "users": [
+    {
+      "email": "maya@driftwood.example",
+      "name": "Maya Chen",
+      "title": "VP of Product",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "raj@driftwood.example",
+      "name": "Raj Patel",
+      "title": "Engineering Lead, Platform",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "priya@driftwood.example",
+      "name": "Priya Nair",
+      "title": "Staff ML Engineer",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "marcus@driftwood.example",
+      "name": "Marcus Johnson",
+      "title": "Head of Design",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "elena@driftwood.example",
+      "name": "Elena Rossi",
+      "title": "Product Marketing Lead",
+      "timezone": "Europe/Rome"
+    },
+    {
+      "email": "tom@driftwood.example",
+      "name": "Tom Becker",
+      "title": "Customer Success Lead",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "aisha@driftwood.example",
+      "name": "Aisha Bello",
+      "title": "Director of Sales",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "daniel@driftwood.example",
+      "name": "Daniel Kim",
+      "title": "Senior PM, Integrations",
+      "timezone": "America/Los_Angeles"
+    },
+    {
+      "email": "sam@driftwood.example",
+      "name": "Sam Okafor",
+      "title": "Software Engineer",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "lena@driftwood.example",
+      "name": "Lena Weiss",
+      "title": "Software Engineer",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "noah@driftwood.example",
+      "name": "Noah Fischer",
+      "title": "Solutions Engineer",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "chris@driftwood.example",
+      "name": "Chris Alvarez",
+      "title": "CEO",
+      "timezone": "America/New_York"
+    },
+    {
+      "email": "helen@driftwood.example",
+      "name": "Helen Park",
+      "title": "CFO",
+      "timezone": "America/New_York"
+    }
+  ],
+  "calendarConnections": [
+    {
+      "userEmail": "maya@driftwood.example",
+      "provider": "google",
+      "accountEmail": "maya@driftwood.example",
+      "autoRecord": "all"
+    },
+    {
+      "userEmail": "aisha@driftwood.example",
+      "provider": "google",
+      "accountEmail": "aisha@driftwood.example",
+      "autoRecord": "external"
+    },
+    {
+      "userEmail": "raj@driftwood.example",
+      "provider": "google",
+      "accountEmail": "raj@driftwood.example",
+      "autoRecord": "all"
+    },
+    {
+      "userEmail": "marcus@driftwood.example",
+      "provider": "google",
+      "accountEmail": "marcus@driftwood.example",
+      "autoRecord": "all"
+    },
+    {
+      "userEmail": "tom@driftwood.example",
+      "provider": "outlook",
+      "accountEmail": "tom@driftwood.example",
+      "autoRecord": "external"
+    },
+    {
+      "userEmail": "elena@driftwood.example",
+      "provider": "google",
+      "accountEmail": "elena@driftwood.example",
+      "autoRecord": "all"
+    }
+  ],
+  "templates": [
+    {
+      "id": "general",
+      "name": "General",
+      "description": "Balanced notes for any meeting: overview, topics, decisions, next steps.",
+      "isDefault": true,
+      "sortOrder": 0,
+      "instructions": "Write neutral, skimmable meeting notes. Prefer concrete nouns and numbers from the call over adjectives. Every decision and next step must cite the lines it came from.",
+      "sections": [
+        {
+          "id": "overview",
+          "heading": "Overview",
+          "guidance": "2-3 sentences: purpose of the call and the outcome."
+        },
+        {
+          "id": "topics",
+          "heading": "Key topics",
+          "guidance": "One bullet per topic discussed, in order, with the gist."
+        },
+        {
+          "id": "decisions",
+          "heading": "Decisions",
+          "guidance": "Only things explicitly agreed. Omit proposals that weren't settled."
+        },
+        {
+          "id": "next_steps",
+          "heading": "Next steps",
+          "guidance": "Owner: task (due date if stated)."
+        },
+        {
+          "id": "open_questions",
+          "heading": "Open questions",
+          "guidance": "Unresolved questions someone needs to answer."
+        }
+      ]
+    },
+    {
+      "id": "product_review",
+      "name": "Product Review",
+      "description": "For roadmap, scoping and launch discussions.",
+      "sortOrder": 1,
+      "instructions": "Summarize for a product team. Separate customer evidence from opinion. Make trade-offs explicit: what was cut or deferred and why. Quote metrics exactly as stated.",
+      "sections": [
+        {
+          "id": "goals",
+          "heading": "Goals",
+          "guidance": "What the team is trying to achieve and how success is measured."
+        },
+        {
+          "id": "customer_signal",
+          "heading": "Customer signal",
+          "guidance": "Evidence from customers, sales and support, with numbers."
+        },
+        {
+          "id": "decisions",
+          "heading": "Decisions",
+          "guidance": "What was decided, including scope and sequencing."
+        },
+        {
+          "id": "scope",
+          "heading": "Scope & trade-offs",
+          "guidance": "In, out, and deferred - with the reason."
+        },
+        {
+          "id": "risks",
+          "heading": "Risks",
+          "guidance": "Technical, commercial or timeline risks raised."
+        },
+        {
+          "id": "launch_plan",
+          "heading": "Launch plan",
+          "guidance": "Dates, audiences, gates."
+        },
+        {
+          "id": "open_questions",
+          "heading": "Open questions",
+          "guidance": "Unresolved and who owns the answer."
+        }
+      ]
+    },
+    {
+      "id": "exec_brief",
+      "name": "Executive Brief",
+      "description": "A 60-second read for leadership: outcomes, risks, asks.",
+      "sortOrder": 2,
+      "instructions": "Write for a busy executive who did not attend. Lead with outcomes. No play-by-play. At most 4 bullets per section. Surface anything that needs a leadership decision.",
+      "sections": [
+        {
+          "id": "tldr",
+          "heading": "TL;DR",
+          "guidance": "The 2-3 things that matter."
+        },
+        {
+          "id": "decisions",
+          "heading": "Decisions made",
+          "guidance": "Settled outcomes only."
+        },
+        {
+          "id": "risks",
+          "heading": "Risks",
+          "guidance": "What could go wrong and its impact."
+        },
+        {
+          "id": "asks",
+          "heading": "Asks & escalations",
+          "guidance": "What the team needs from leadership."
+        }
+      ]
+    },
+    {
+      "id": "sales_discovery",
+      "name": "Sales Discovery",
+      "description": "Qualification notes: pain, requirements, budget, decision process.",
+      "sortOrder": 3,
+      "instructions": "Summarize a sales conversation for the account team and CRM. Use the prospect's own words for pains. Be explicit about unknowns in budget, timeline and decision process - never guess.",
+      "sections": [
+        {
+          "id": "company",
+          "heading": "Company context",
+          "guidance": "Who they are, size, team using the product."
+        },
+        {
+          "id": "pain",
+          "heading": "Pain points",
+          "guidance": "Problems in the prospect's words, with impact."
+        },
+        {
+          "id": "current_solution",
+          "heading": "Current solution",
+          "guidance": "What they use today and why it falls short."
+        },
+        {
+          "id": "requirements",
+          "heading": "Requirements & objections",
+          "guidance": "Must-haves, deal blockers, concerns."
+        },
+        {
+          "id": "budget_timeline",
+          "heading": "Budget & timeline",
+          "guidance": "Stated budget, timing, triggers."
+        },
+        {
+          "id": "decision_process",
+          "heading": "Decision process",
+          "guidance": "Champion, economic buyer, steps, competitors."
+        },
+        {
+          "id": "next_steps",
+          "heading": "Next steps",
+          "guidance": "Agreed follow-ups on both sides."
+        }
+      ]
+    },
+    {
+      "id": "standup",
+      "name": "Daily Standup",
+      "description": "Per-person progress, plans and blockers.",
+      "sortOrder": 4,
+      "instructions": "One bullet per person per section, prefixed with their name. Keep each under 20 words. Blockers must name who can unblock.",
+      "sections": [
+        {
+          "id": "done",
+          "heading": "Since last standup",
+          "guidance": "Completed or progressed work."
+        },
+        {
+          "id": "today",
+          "heading": "Today",
+          "guidance": "Planned focus."
+        },
+        {
+          "id": "blockers",
+          "heading": "Blockers",
+          "guidance": "What's blocked and who can unblock it."
+        }
+      ]
+    },
+    {
+      "id": "one_on_one",
+      "name": "1:1",
+      "description": "Manager/report conversation: wins, concerns, feedback, growth.",
+      "sortOrder": 5,
+      "instructions": "Write private 1:1 notes in a supportive, factual tone. Capture feedback in both directions. Do not editorialize about the person.",
+      "sections": [
+        {
+          "id": "wins",
+          "heading": "Wins",
+          "guidance": "Recent progress worth recognizing."
+        },
+        {
+          "id": "concerns",
+          "heading": "Concerns & blockers",
+          "guidance": "What's worrying or slowing them down."
+        },
+        {
+          "id": "feedback",
+          "heading": "Feedback",
+          "guidance": "Feedback given or asked for, both directions."
+        },
+        {
+          "id": "growth",
+          "heading": "Growth",
+          "guidance": "Career goals, stretch opportunities."
+        },
+        {
+          "id": "follow_ups",
+          "heading": "Follow-ups",
+          "guidance": "Commitments from either side."
+        }
+      ]
+    },
+    {
+      "id": "interview",
+      "name": "Candidate Interview",
+      "description": "Structured interview debrief with evidence for each signal.",
+      "sortOrder": 6,
+      "instructions": "Write an interview debrief. Every signal must be backed by what the candidate actually said or did. Separate observation from judgment. End with a recommendation and confidence.",
+      "sections": [
+        {
+          "id": "background",
+          "heading": "Candidate background",
+          "guidance": "Relevant experience as described by the candidate."
+        },
+        {
+          "id": "technical",
+          "heading": "Technical assessment",
+          "guidance": "Problem-solving and depth, with evidence."
+        },
+        {
+          "id": "communication",
+          "heading": "Communication & collaboration",
+          "guidance": "How they explained, listened, handled pushback."
+        },
+        {
+          "id": "strengths",
+          "heading": "Strengths",
+          "guidance": "Clear positives."
+        },
+        {
+          "id": "concerns",
+          "heading": "Concerns",
+          "guidance": "Gaps or risks, with evidence."
+        },
+        {
+          "id": "recommendation",
+          "heading": "Recommendation",
+          "guidance": "Hire / no hire / next round, with confidence."
+        }
+      ]
+    }
+  ],
+  "calendarEvents": [
+    {
+      "key": "q4-product-alignment",
+      "userEmail": "maya@driftwood.example",
+      "title": "Q4 Product Alignment: Insights 2.0",
+      "description": "Lock Insights 2.0 scope, beta date, and the SSO vs Jira call. Pre-read: Daniel's one-pager, Priya's eval sheet.",
+      "startsAt": "D-2@15:00",
+      "durationMin": 60,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d1",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+1@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d2",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+2@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d3",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+3@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d4",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+4@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d7",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+7@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d8",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+8@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d9",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+9@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d10",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+10@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-standup-d11",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights squad standup",
+      "startsAt": "D+11@14:30",
+      "durationMin": 15,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-go-no-go",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights 2.0 beta go/no-go",
+      "description": "Decide whether the beta ships to design partners. Inputs: Priya's precision eval, Raj's latency numbers, Tom's partner list.",
+      "startsAt": "D+10@17:00",
+      "durationMin": 45,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-globex-saml",
+      "userEmail": "aisha@driftwood.example",
+      "title": "Globex: SAML SSO follow-up",
+      "description": "Walk Globex security through the SAML design and timeline.",
+      "startsAt": "D+4@16:00",
+      "durationMin": 30,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Victor Hale",
+          "email": "victor.hale@globex.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Nadia Simmons",
+          "email": "nadia.simmons@globex.example",
+          "responseStatus": "tentative",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-pricing-leadership",
+      "userEmail": "maya@driftwood.example",
+      "title": "AI usage caps: pricing proposal review",
+      "startsAt": "D+5@18:00",
+      "durationMin": 45,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Chris Alvarez",
+          "email": "chris@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Helen Park",
+          "email": "helen@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-interview-staff-data",
+      "userEmail": "raj@driftwood.example",
+      "title": "Interview: Staff Data Engineer (Kwame Mensah)",
+      "startsAt": "D+2@19:00",
+      "durationMin": 60,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Kwame Mensah",
+          "email": "kwame.mensah@mail.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-1on1-raj",
+      "userEmail": "maya@driftwood.example",
+      "title": "Maya / Raj 1:1",
+      "startsAt": "D+3@19:30",
+      "durationMin": 30,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-1on1-elena",
+      "userEmail": "maya@driftwood.example",
+      "title": "Maya / Elena 1:1",
+      "startsAt": "D+6@15:00",
+      "durationMin": 30,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-1on1-daniel",
+      "userEmail": "maya@driftwood.example",
+      "title": "Maya / Daniel 1:1",
+      "startsAt": "D+2@21:00",
+      "durationMin": 30,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-kestrel-kickoff",
+      "userEmail": "tom@driftwood.example",
+      "title": "Kestrel Logistics: design partner kickoff",
+      "startsAt": "D+6@17:00",
+      "durationMin": 45,
+      "platform": "teams",
+      "attendees": [
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Grace Liu",
+          "email": "grace.liu@kestrel.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Ben Carter",
+          "email": "ben.carter@kestrel.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-leadership-sync",
+      "userEmail": "chris@driftwood.example",
+      "title": "Weekly leadership sync",
+      "startsAt": "D+7@16:00",
+      "durationMin": 60,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Chris Alvarez",
+          "email": "chris@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Helen Park",
+          "email": "helen@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-design-crit",
+      "userEmail": "marcus@driftwood.example",
+      "title": "Design crit: beta onboarding flow",
+      "startsAt": "D+2@17:30",
+      "durationMin": 45,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-arcadia-demo",
+      "userEmail": "aisha@driftwood.example",
+      "title": "Arcadia Health: technical deep dive",
+      "startsAt": "D+5@15:00",
+      "durationMin": 60,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Noah Fischer",
+          "email": "noah@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Rosa Delgado",
+          "email": "rosa.delgado@arcadiahealth.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Imran Qureshi",
+          "email": "imran.qureshi@arcadiahealth.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-launch-review",
+      "userEmail": "elena@driftwood.example",
+      "title": "Beta launch comms review",
+      "startsAt": "D+8@15:30",
+      "durationMin": 30,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-cab",
+      "userEmail": "tom@driftwood.example",
+      "title": "Customer Advisory Board (Q4)",
+      "description": "Quarterly session with 9 advisory customers. Preview of Insights 2.0 themes view.",
+      "startsAt": "D+12@14:30",
+      "durationMin": 90,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Chris Alvarez",
+          "email": "chris@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Olivia Grant",
+          "email": "olivia.grant@brightline.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Grace Liu",
+          "email": "grace.liu@kestrel.example",
+          "responseStatus": "tentative",
+          "isOrganizer": false
+        },
+        {
+          "name": "Hiro Tanaka",
+          "email": "hiro.tanaka@juniperfoods.example",
+          "responseStatus": "needsAction",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-offsite-prep",
+      "userEmail": "maya@driftwood.example",
+      "title": "Q1 planning offsite prep",
+      "startsAt": "D+9@18:00",
+      "durationMin": 60,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-latency-review",
+      "userEmail": "raj@driftwood.example",
+      "title": "Clustering latency review",
+      "startsAt": "D+4@19:00",
+      "durationMin": 30,
+      "platform": "google_meet",
+      "attendees": [
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Sam Okafor",
+          "email": "sam@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-juniper-discovery",
+      "userEmail": "aisha@driftwood.example",
+      "title": "Juniper Foods: follow-up discovery",
+      "startsAt": "D+11@16:00",
+      "durationMin": 30,
+      "platform": "teams",
+      "attendees": [
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Noah Fischer",
+          "email": "noah@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Hiro Tanaka",
+          "email": "hiro.tanaka@juniperfoods.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-security-review",
+      "userEmail": "daniel@driftwood.example",
+      "title": "SAML SSO security design review",
+      "startsAt": "D+7@20:00",
+      "durationMin": 45,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Lena Weiss",
+          "email": "lena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    },
+    {
+      "key": "up-board-prep",
+      "userEmail": "maya@driftwood.example",
+      "title": "Board deck prep (not recorded)",
+      "startsAt": "D+12@17:00",
+      "durationMin": 60,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Chris Alvarez",
+          "email": "chris@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Helen Park",
+          "email": "helen@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ],
+      "recordEnabled": false
+    },
+    {
+      "key": "past-board-sync",
+      "userEmail": "maya@driftwood.example",
+      "title": "Board metrics sync (not recorded)",
+      "startsAt": "D-5@20:00",
+      "durationMin": 30,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Chris Alvarez",
+          "email": "chris@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Helen Park",
+          "email": "helen@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ],
+      "recordEnabled": false
+    },
+    {
+      "key": "up-ga-readiness",
+      "userEmail": "maya@driftwood.example",
+      "title": "Insights 2.0 beta kickoff with design partners",
+      "startsAt": "D+14@17:00",
+      "durationMin": 60,
+      "platform": "zoom",
+      "attendees": [
+        {
+          "name": "Maya Chen",
+          "email": "maya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": true
+        },
+        {
+          "name": "Raj Patel",
+          "email": "raj@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Priya Nair",
+          "email": "priya@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Marcus Johnson",
+          "email": "marcus@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Elena Rossi",
+          "email": "elena@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Tom Becker",
+          "email": "tom@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Aisha Bello",
+          "email": "aisha@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        },
+        {
+          "name": "Daniel Kim",
+          "email": "daniel@driftwood.example",
+          "responseStatus": "accepted",
+          "isOrganizer": false
+        }
+      ]
+    }
+  ]
+}

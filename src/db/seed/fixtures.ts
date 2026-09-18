@@ -27,6 +27,17 @@ const RELATIVE_TIME = /^D([+-]\d+)@([01]\d|2[0-3]):([0-5]\d)$/;
 
 export const relativeTime = z.string().regex(RELATIVE_TIME, 'expected "D<+/-days>@HH:MM", e.g. "D-3@14:30"');
 
+const RELATIVE_DAY = /^D([+-]\d+)$/;
+/** A calendar date: absolute ISO ("2026-10-02") or relative to the seed day ("D+3"). */
+export const dateOrRelative = z.union([z.iso.date(), z.string().regex(RELATIVE_DAY, 'expected "D<+/-days>"')]);
+
+export function resolveDate(value: string, now: Date): string {
+  const m = RELATIVE_DAY.exec(value);
+  if (!m) return value;
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + Number(m[1])));
+  return d.toISOString().slice(0, 10);
+}
+
 /** Resolve "D-3@14:30" against the seed run's current UTC date. */
 export function resolveRelativeTime(value: string, now: Date): Date {
   const m = RELATIVE_TIME.exec(value);
@@ -113,7 +124,7 @@ const meetingFixture = z.object({
         /** Speaker index of the owner, or null when unassigned. */
         assignee: z.number().int().min(0).nullable().default(null),
         assigneeName: z.string().optional(),
-        dueDate: z.iso.date().optional(),
+        dueDate: dateOrRelative.optional(),
         dueText: z.string().optional(),
         status: z.enum(["open", "done"]).default("open"),
         origin: z.enum(["ai", "manual"]).default("ai"),

@@ -1,0 +1,331 @@
+import { defineMeeting, type Line } from "../../dsl";
+import { D, staff } from "../../workspace";
+import { inserts } from "./extras";
+import { part1 } from "./part1";
+import { part2 } from "./part2";
+
+/** Splice each extra scene in right after the line carrying its anchor tag. */
+function withInserts(lines: Line[]): Line[] {
+  const used = new Set<string>();
+  const out = lines.flatMap((l) => {
+    const t = Array.isArray(l) ? l[2] : undefined;
+    if (t && inserts[t]) {
+      used.add(t);
+      return [l, ...inserts[t]];
+    }
+    return [l];
+  });
+  const unused = Object.keys(inserts).filter((k) => !used.has(k));
+  if (unused.length) throw new Error(`q4-alignment: insert anchors not found: ${unused.join(", ")}`);
+  return out;
+}
+
+/** The hero meeting: 8 speakers, exactly one hour. */
+export default defineMeeting({
+  key: "q4-product-alignment",
+  title: "Q4 Product Alignment: Insights 2.0",
+  meetingType: "product_review",
+  defaultTemplate: "product_review",
+  platform: "zoom",
+  owner: D("maya"),
+  startedAt: "D-2@15:00",
+  scheduledMin: 60,
+  description: "Lock Insights 2.0 scope, beta date, and the SSO vs Jira call. Pre-read: Daniel's one-pager, Priya's eval sheet.",
+  targetMinutes: 60,
+  participants: {
+    maya: staff("maya"),
+    raj: staff("raj"),
+    priya: staff("priya"),
+    marcus: staff("marcus"),
+    elena: staff("elena"),
+    tom: staff("tom"),
+    aisha: staff("aisha"),
+    daniel: staff("daniel"),
+  },
+  script: withInserts([...part1, ...part2]),
+
+  highlights: [
+    { at: "pilot-quote", label: "Pilot customer: 'first time the tool told me something I didn't know'", by: "elena" },
+    { at: "sso-blocked", label: "$420K ACV blocked on SAML SSO", by: "aisha" },
+    { at: "precision-79", label: "Clustering precision 79% (GA bar: 85%)", by: "priya" },
+    { at: "not-both", label: "Capacity: SSO or Jira this quarter, not both", by: "raj" },
+    { at: "themes-decision", label: "Themes becomes the default view" },
+    { at: "sso-decision", label: "Decision: SAML SSO first, Jira to Q1" },
+    { at: "gate-decision", label: "GA gated on 85% precision" },
+  ],
+
+  clips: [
+    { slug: "pilot-customer-quote", title: "What pilot customers said about theme clustering", from: "pilot-quote", to: "tom-ask-quote", views: 57, by: "elena" },
+    { slug: "why-sso-before-jira", title: "Why SSO is blocking $420K in pipeline", from: "sso-blocked", to: "sso-vs-jira-sales", views: 34, by: "aisha" },
+    { slug: "precision-explained", title: "What 79% vs 85% precision feels like to a customer", from: "precision-79", to: "precision-feel", views: 18, by: "priya" },
+    { slug: "themes-first-dashboard", title: "Walkthrough: the Themes-first home screen", from: "themes-default", to: "merge-split", views: 21, by: "marcus" },
+    { slug: "sso-vs-jira-decision", title: "The SSO vs Jira decision", from: "daniel-rec", to: "sso-decision", views: 42 },
+  ],
+
+  actionItems: [
+    {
+      text: "Confirm how many of the 11 Jira-requesting accounts churned; send to Maya and Daniel",
+      owner: "tom",
+      at: "tom-churn-commit",
+      quote: "I'll confirm the Jira churn number and send it to you and Daniel today",
+      due: "D-2",
+      dueText: "today",
+      status: "done",
+    },
+    {
+      text: "Grow the labeled eval set to 2,000 comments (incl. retail + healthcare) and share the precision report",
+      owner: "priya",
+      at: "priya-eval-commit",
+      quote: "share the precision report by the middle of next week",
+      due: "D+6",
+      dueText: "by the middle of next week",
+    },
+    {
+      text: "Scope a PII redaction pass (names, record numbers) before healthcare accounts join the beta",
+      owner: "priya",
+      at: "pii-commit",
+      quote: "Daniel and I will scope the PII redaction pass this week",
+      due: "D+3",
+      dueText: "this week",
+    },
+    {
+      text: "Plan incremental theme assignment with a p95 < 3s budget and nightly background re-cluster",
+      owner: "raj",
+      at: "recap-1",
+      quote: "the incremental assignment plan with the three second budget",
+    },
+    {
+      text: "Update the dashboard prototype: <200-comment empty state, Zendesk import in onboarding, 'switch back to feed' toggle",
+      owner: "marcus",
+      at: "marcus-commit",
+      quote: "I'll have the updated prototype ready by end of this week",
+      due: "D+3",
+      dueText: "by end of this week",
+    },
+    {
+      text: "Write the SAML SSO requirements doc: Okta + Azure AD, audit log events, admin setup flow",
+      owner: "daniel",
+      at: "daniel-commit",
+      quote: "I'll write the SAML requirements doc this week",
+      due: "D+3",
+      dueText: "this week",
+    },
+    {
+      text: "Spike the SAML library and confirm (or revise) the six-week estimate",
+      owner: "raj",
+      at: "raj-spike",
+      quote: "I'll do the spike and have an estimate I actually trust within three days",
+      due: "D+1",
+      dueText: "within three days",
+    },
+    {
+      text: "Send updated security questionnaire answers to Globex and Arcadia (SSO: in development) after Daniel's review",
+      owner: "aisha",
+      at: "aisha-commit",
+      quote: "I'll send Globex and Arcadia our updated security questionnaire answers",
+      status: "done",
+    },
+    {
+      text: "Tell the Jira-requesting accounts it's coming in Q1; personally call the two that churned",
+      owner: "tom",
+      at: "tom-calls",
+      quote: "I'd like to call the two that churned personally",
+    },
+    {
+      text: "Draft the messaging brief ('from feedback to decisions') and the beta invite email",
+      owner: "elena",
+      at: "elena-commit",
+      quote: "I'll have a draft of the messaging brief and the beta invite by early next week",
+      due: "D+5",
+      dueText: "by early next week",
+    },
+    {
+      text: "Shortlist 20 design partners plus backups (pilot accounts, larger accounts, retail and healthcare)",
+      owner: "tom",
+      at: "tom-commit",
+      quote: "I'll shortlist twenty design partners, plus a few backups",
+      due: "D+4",
+      dueText: "at the start of next week",
+    },
+    {
+      text: "Bring an AI usage-caps pricing proposal to leadership; share a draft with Elena and Aisha first",
+      owner: "maya",
+      at: "maya-commit",
+      quote: "I'll bring a proposal on AI usage caps to the leadership team by end of next week",
+      due: "D+8",
+      dueText: "by end of next week",
+    },
+    {
+      text: "Schedule the beta go/no-go review (eval + latency results)",
+      owner: "maya",
+      at: "maya-go-no-go",
+      quote: "I'll schedule the beta go or no-go meeting today",
+      due: "D-2",
+      dueText: "today",
+      status: "done",
+    },
+    {
+      text: "Write labeling guidelines with examples before the CS team's labeling days",
+      owner: "priya",
+      at: "labeling-guidelines",
+      quote: "I'll write up labeling guidelines with examples before they start",
+      due: "D+1",
+      dueText: "before the labeling days",
+      status: "done",
+    },
+    {
+      text: "Spec the 'share theme to Slack' flow for the beta; log the weekly digest as a post-beta follow-on",
+      owner: "marcus",
+      at: "marcus-slack-commit",
+      quote: "I'll spec the share to Slack flow for the beta",
+    },
+    {
+      text: "Schedule a security design review for SAML once the requirements draft is ready",
+      owner: "daniel",
+      at: "security-review-commit",
+      quote: "I'll schedule a security design review as soon as the draft is ready",
+    },
+    {
+      text: "Prepare an Insights 2.0 demo script and competitive battlecard for sales",
+      owner: "elena",
+      at: "elena-enablement-commit",
+      quote: "I'll have the demo script and the battlecard ready about two weeks after the beta invite",
+      due: "D+19",
+      dueText: "about two weeks after the beta invite",
+    },
+    {
+      text: "Write an FAQ for existing customers on the Themes default and the feed toggle",
+      owner: "tom",
+      at: "tom-faq-commit",
+      quote: "I'll put together an FAQ for existing customers about the Themes default and the feed toggle",
+    },
+    {
+      text: "Ask Sana (Lakeshore Bank) for permission to use her pilot quote in launch materials",
+      owner: "tom",
+      at: "tom-ask-quote",
+      quote: "I'll ask her",
+    },
+  ],
+  manualActionItems: [{ text: "Book a room for the go/no-go and send Priya's eval sheet as pre-read", owner: "maya", due: "D+9" }],
+
+  knowledge: {
+    overview:
+      "Cross-functional alignment on Insights 2.0 (AI theme clustering). The team chose SAML SSO over the full Jira integration this quarter, made Themes the default view, and agreed to a private beta with about 20 design partners, with GA gated on 85% clustering precision.",
+    topics: [
+      { title: "Ingest outage recap", summary: "A locking schema migration delayed ingest ~6 hours for 212 workspaces; queue-lag alerting shipped, online migrations remain (~1 engineer to month end).", from: "outage-summary", to: "outage-remaining" },
+      { title: "Customer signal", summary: "17 of 41 churned or downgraded accounts said nobody reads the feedback; 11 asked for Jira, 9 for Slack summaries; 6 of 8 pilot accounts asked for theme clustering.", from: "churn-stat", to: "slack-app-noisy" },
+      { title: "Enterprise pipeline blocked on SSO", summary: "Globex ($260K, Okta) and Arcadia Health ($160K, Azure AD) won't sign without SAML SSO; Globex also needs audit logs and a date in writing.", from: "sso-blocked", to: "tom-churn-commit" },
+      { title: "Competitive positioning", summary: "Two lost deals went to a competitor with a simpler 'AI insights' story.", from: "competitive", to: "competitive" },
+      { title: "Enterprise and mid-market pipeline", summary: "Arcadia: ~3,000 agents, patient-portal feedback. Kestrel Logistics is a strong design-partner candidate. Competitor charges $15/seat/month for AI.", from: "arcadia-context", to: "competitor-price" },
+      { title: "Clustering accuracy", summary: "Precision is 79% (up from 71%), GA bar is 85%. Main failures: merging distinct billing problems and overly broad themes; ~4% of summary sentences are unsupported and get dropped.", from: "precision-71", to: "labeling-guidelines" },
+      { title: "PII redaction for healthcare", summary: "Only emails and phone numbers are redacted today; a proper redaction pass is needed before healthcare accounts join.", from: "phi-concern", to: "pii-commit" },
+      { title: "Clustering latency", summary: "Largest workspace takes 38s at p95. Agreed: incremental assignment in-product, nightly full re-cluster, p95 under 3s.", from: "latency-q", to: "latency-decision" },
+      { title: "Platform capacity", summary: "Three engineers are free for new work: Insights 2.0 plus either SSO or Jira, not both.", from: "capacity-three", to: "hold-sso" },
+      { title: "Themes-first dashboard", summary: "Home becomes ranked Themes with trend, source mix and three quotes; merge/split in the detail view; empty state below ~200 comments.", from: "themes-default", to: "naming" },
+      { title: "Share to Slack and weekly digest", summary: "One-off 'share theme to Slack' is in the beta; the weekly digest needs new email/notification infrastructure and waits until after the beta.", from: "share-slack", to: "marcus-slack-commit" },
+      { title: "SSO vs Jira", summary: "Daniel's recommendation adopted: SAML SSO first (about 6 weeks), full Jira in Q1, a one-way 'create Jira issue' button now.", from: "daniel-onepager", to: "tom-calls" },
+      { title: "SAML details", summary: "JIT provisioning at launch, SCIM later; enforce-SSO with a break-glass admin; audit logs (logins, exports, role/settings changes, deletions) kept 1 year with CSV/API export; Lena pairs; security review before build.", from: "jit", to: "security-review-commit" },
+      { title: "Launch plan and messaging", summary: "Private beta with ~20 design partners in about two weeks; GA gated on 85%; test 'from feedback to decisions'.", from: "launch-plan", to: "gate-decision" },
+      { title: "Pricing", summary: "Undecided. AI costs ~$1.80/month for the median workspace, ~$14 for the largest; leaning toward themes in Pro with a summaries cap (~50K comments/month). Beta is free, pricing at GA.", from: "pricing-q", to: "maya-commit" },
+    ],
+    decisions: [
+      ["Incremental theme assignment in the product with a nightly full re-cluster; p95 under 3 seconds for anything the user waits on.", "latency-decision"],
+      ["Themes is the default view for all workspaces; existing customers get a 'switch back to feed' toggle during the beta.", "themes-decision"],
+      ["Prioritize SAML SSO (Okta and Azure AD) plus audit logs this quarter, two engineers, about six weeks. Full Jira integration moves to Q1.", "sso-decision"],
+      ["Ship a one-way 'create Jira issue' button from themes in Insights 2.0, with no sync.", "sso-decision", "scope-guard"],
+      ["One-off 'share theme to Slack' ships in the beta; the weekly digest waits until after the beta.", "digest-decision"],
+      ["SAML launches with JIT provisioning, enforce-SSO plus a break-glass admin, and audit logs with CSV/API export; SCIM and a native Splunk connector come later.", "jit", "enforce-sso", "audit-export"],
+      ["The private beta starts on schedule; GA is gated on 85% precision.", "gate-decision"],
+      ["Healthcare design partners join only after the PII redaction pass ships.", "healthcare-gate"],
+      ["The beta is free for design partners; pricing is announced at GA.", "maya-commit"],
+    ],
+    openQuestions: [
+      ["Packaging for AI features: themes included in Pro with usage caps on AI summaries, or an add-on?", "pricing-instinct"],
+      ["If the eval stays near 79%, how long will merge/split feedback take to reach 85%?", "beta-risk"],
+      ["'Themes' or 'Topics'? To be tested with design partners.", "naming"],
+      ["What should the post-beta weekly digest contain, and should it go to email, Slack, or both?", "digest", "raj-digest"],
+      ["How many of the 11 Jira-requesting accounts actually churned (believed to be two)?", "confirm-churn"],
+    ],
+    speakerContributions: {
+      maya: "Facilitated; drove the SSO vs Jira and beta-gate decisions; owns pricing proposal and go/no-go.",
+      raj: "Laid out platform capacity (3 engineers) and estimates; set the 3s latency budget and scope guard on the Jira button.",
+      priya: "Presented model precision (71% to 79%, target 85%) and the path to GA; raised the PII redaction work.",
+      marcus: "Walked through the Themes-first dashboard, merge/split and the small-workspace empty state.",
+      elena: "Proposed the design-partner beta and the 'from feedback to decisions' positioning; suggested Zendesk import in onboarding.",
+      tom: "Shared churn analysis and pilot feedback; will pick design partners and call churned Jira accounts.",
+      aisha: "Quantified $420K pipeline blocked on SSO; relayed Globex's requirements.",
+      daniel: "Recommended SSO first with a one-way Jira button; will write the SAML requirements doc.",
+    },
+  },
+
+  summaries: {
+    product_review: {
+      goals: [
+        ["Leave with a locked Insights 2.0 scope, a believable beta date, and a decision on SSO vs Jira.", "goals"],
+        ["Reach 85% clustering precision before GA (currently 79%).", "precision-79"],
+        ["Keep anything a user waits on under 3 seconds at p95.", "latency-budget"],
+      ],
+      customer_signal: [
+        ["17 of 41 churned or downgraded accounts in the last 90 days said the feedback never gets read.", "churn-stat"],
+        ["11 accounts asked for Jira by name; about 2 churned over it (being confirmed).", "jira-eleven", "confirm-churn"],
+        ["Brightline stopped trusting the legacy keyword tagger (about 60% precision).", "tagging-trust"],
+        ["Harbor & Pine's CX lead still hand-copies tickets into slides every Monday; 9 accounts asked for Slack summaries.", "harbor-quote", "slack-nine"],
+        ["6 of 8 pilot accounts asked unprompted for theme clustering.", "pilot-quote"],
+        ["$420K ACV (Globex $260K on Okta, Arcadia $160K on Azure AD) is blocked on SAML SSO.", "sso-blocked", "globex-ask"],
+        ["Two recent losses went to a competitor with a simpler 'AI insights' story.", "competitive"],
+      ],
+      decisions: [
+        ["SAML SSO (Okta + Azure AD) with audit logs this quarter, about 6 weeks; full Jira integration moves to Q1.", "sso-decision"],
+        ["Themes is the default home view, with a temporary feed toggle for existing customers.", "themes-decision"],
+        ["Incremental assignment in-product, nightly full re-cluster, p95 under 3s.", "latency-decision"],
+        ["The beta starts on schedule; GA is gated on 85% precision.", "gate-decision"],
+      ],
+      scope: [
+        ["In: Themes home, merge/split with training feedback, Zendesk import in onboarding, one-way 'create Jira issue' button.", "merge-split", "zendesk-idea", "daniel-rec"],
+        ["In: one-off 'share theme to Slack' (the Harbor & Pine Monday-slides use case).", "share-slack", "harbor-quote"],
+        ["Out: two-way Jira sync or status updates, to keep the button from becoming a full integration.", "scope-guard"],
+        ["Deferred: the weekly digest, which needs new email and notification infrastructure.", "raj-digest", "digest-decision"],
+        ["Deferred: full Jira integration (Q1) and SCIM.", "estimates", "sso-decision"],
+        ["Held back: healthcare design partners until PII redaction ships.", "healthcare-gate"],
+      ],
+      risks: [
+        ["Only three engineers are free for new work; the outage hardening still needs one engineer until month end.", "capacity-three"],
+        ["Precision may still be about 79% at beta start; the main failure modes are merged billing problems and overly broad themes.", "beta-risk", "failure-billing", "failure-broad"],
+        ["About 4% of generated summary sentences are unsupported; the check drops them, but they cap quality.", "summary-check"],
+        ["Healthcare feedback can contain patient information; only emails and phone numbers are redacted today.", "phi-concern", "pii-redaction"],
+        ["Existing admins trained on the feed may be surprised by Themes-first.", "feed-toggle"],
+      ],
+      launch_plan: [
+        ["Private beta with about 20 design partners in roughly two weeks, invited personally.", "launch-plan"],
+        ["Partner mix: the 6 pilot requesters, some larger accounts, retail and healthcare.", "partner-mix"],
+        ["Big launch (blog, webinar, customer stories) at GA once 85% is reached.", "ga-plan"],
+        ["Test 'from feedback to decisions' messaging with the beta invite.", "messaging"],
+        ["A go/no-go review a few days before the beta.", "go-no-go"],
+      ],
+      open_questions: [
+        ["AI packaging: in Pro with a summaries cap (~50K comments/month), or an add-on? Maya to propose with Helen.", "pricing-instinct", "cap-idea"],
+        ["'Themes' or 'Topics'? Watch what design partners call them.", "naming"],
+      ],
+    },
+    exec_brief: {
+      tldr: [
+        ["Insights 2.0 private beta with about 20 design partners starts in about two weeks; GA is gated on 85% clustering precision (79% today).", "launch-plan", "precision-79"],
+        ["SAML SSO jumps ahead of the Jira integration to unblock $420K in enterprise pipeline.", "sso-decision"],
+      ],
+      decisions: [
+        ["SSO (Okta + Azure AD, audit logs) this quarter, about 6 weeks; Jira in Q1, with a one-way Jira button now.", "sso-decision"],
+        ["Themes becomes the default product view.", "themes-decision"],
+        ["The beta is free; pricing is announced at GA.", "maya-commit"],
+      ],
+      risks: [
+        ["Engineering capacity: 3 engineers for new work, with no slack for both SSO and Jira.", "not-both"],
+        ["The GA date depends on precision gains from beta feedback.", "beta-risk"],
+        ["Healthcare privacy: PII redaction must ship before healthcare partners.", "phi-concern"],
+      ],
+      asks: [
+        ["Leadership review of an AI usage-caps pricing proposal by end of next week.", "maya-commit"],
+        ["Hold the six-week SSO date with Globex; don't promise earlier.", "six-weeks"],
+      ],
+    },
+  },
+});

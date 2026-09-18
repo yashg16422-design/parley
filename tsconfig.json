@@ -13,6 +13,6 @@
     "noEmit": true,
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "scripts", "drizzle.config.ts"],
+  "include": ["src", "scripts", "seed/src", "drizzle.config.ts"],
   "exclude": ["node_modules", "drizzle"]
 }

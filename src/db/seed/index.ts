@@ -19,7 +19,7 @@ const { values } = parseArgs({
 
 async function main() {
   const { loadFixtures } = await import("./fixtures");
-  const { seed, validateReferences } = await import("./seed");
+  const { seed, buildRows, countRows } = await import("./seed");
 
   const dir = path.resolve(values.dir!);
   const { dataset, files } = await loadFixtures(dir);
@@ -30,9 +30,8 @@ async function main() {
   console.log(`Loaded ${files.length} fixture file(s): ${dataset.meetings.length} meetings, ${dataset.calendarEvents.length} calendar events`);
 
   if (values["dry-run"]) {
-    const errors = validateReferences(dataset);
-    if (errors.length) throw new Error(`Fixture reference errors:\n  - ${errors.join("\n  - ")}`);
-    console.log("Dry run: fixtures are valid. Database untouched.");
+    console.table(countRows(buildRows(dataset)));
+    console.log("Dry run: fixtures are valid; rows above would be inserted. Database untouched.");
     return;
   }
 
