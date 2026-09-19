@@ -10,10 +10,13 @@ type DgMessage =
   | { type: "Results"; is_final: boolean; speech_final: boolean; channel: { alternatives: { transcript: string; words: DgWord[] }[] } }
   | { type: "UtteranceEnd" | "Metadata" | "SpeechStarted" };
 
-export const DEEPGRAM_URL = `wss://api.deepgram.com/v1/listen?${new URLSearchParams({
+export const deepgramUrl = (overrides: Record<string, string> = {}) => `wss://api.deepgram.com/v1/listen?${new URLSearchParams({
   model: "nova-3", language: "en", diarize: "true", smart_format: "true", punctuate: "true",
-  interim_results: "true", endpointing: "300", utterance_end_ms: "1000", vad_events: "true",
+  interim_results: "true", endpointing: "300", utterance_end_ms: "1000", vad_events: "true", ...overrides,
 })}`;
+
+/** Where the short-lived token comes from: this app's route with the session cookie, or any Parley host with an access token. */
+export type DeepgramOpts = { params?: Record<string, string>; tokenUrl?: string; headers?: HeadersInit };
 
 /** Final words → one line per speaker turn. Word times are seconds from stream start. */
 export function wordsToLines(words: readonly DgWord[], offsetMs = 0): DgLine[] {
@@ -38,12 +41,12 @@ type Handlers = {
 };
 
 /** Opens one Deepgram session on `stream`. `offsetMs` is the call clock when audio starts. */
-export async function openDeepgram(stream: MediaStream, offsetMs: () => number, h: Handlers) {
-  const r = await fetch("/api/deepgram/token", { method: "POST" });
+export async function openDeepgram(stream: MediaStream, offsetMs: () => number, h: Handlers, opts: DeepgramOpts = {}) {
+  const r = await fetch(opts.tokenUrl ?? "/api/deepgram/token", { method: "POST", headers: opts.headers });
   const body = (await r.json().catch(() => ({}))) as { accessToken?: string; error?: string };
   if (!r.ok || !body.accessToken) throw new TranscriptionUnavailable(body.error ?? `token request failed (HTTP ${r.status})`);
 
-  const ws = new WebSocket(DEEPGRAM_URL, ["bearer", body.accessToken]);
+  const ws = new WebSocket(deepgramUrl(opts.params), ["bearer", body.accessToken]);
   const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t));
   const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
   let buf: DgWord[] = [], base = 0, stopping = false, keepAlive = 0;

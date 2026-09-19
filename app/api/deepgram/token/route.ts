@@ -1,5 +1,7 @@
 import { jsonError } from "@/http";
-import { currentUserId, findUser } from "@/session";
+import { requestUser } from "@/auth";
+import { getDb } from "@/db";
+import { resolveKey } from "@/keys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,10 +11,12 @@ export const dynamic = "force-dynamic";
  * its own WebSocket to Deepgram. The key never leaves the server, and audio never
  * passes through it.
  */
-export async function POST() {
-  if (!(await findUser(await currentUserId()))) return jsonError(401, "no workspace session; open / first");
-  const key = process.env.DEEPGRAM_API_KEY;
-  if (!key) return jsonError(503, "live transcription isn't configured on this server (DEEPGRAM_API_KEY)");
+export async function POST(req: Request) {
+  const me = await requestUser(req, "ingest");
+  if (!me) return jsonError(401, "no workspace session or valid ingest token");
+  // BYOK: the user's own Deepgram key if they saved one, else the server's.
+  const key = (await resolveKey(getDb(), me.id, "deepgram"))?.key;
+  if (!key) return jsonError(503, "live transcription isn't configured (add your Deepgram key in Settings, or set DEEPGRAM_API_KEY)");
   const r = await fetch("https://api.deepgram.com/v1/auth/grant", {
     method: "POST",
     headers: { authorization: `Token ${key}`, "content-type": "application/json" },

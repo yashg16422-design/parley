@@ -1,4 +1,4 @@
-import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves } from "lucide-react";
+import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves, Settings } from "lucide-react";
 import { leaveWorkspace } from "@app/actions/workspace";
 import { NavLink } from "@/components/nav-link";
 import { PersonAvatar } from "@/components/person";
@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>
           <NavLink href="/action-items"><CheckSquare />Action items</NavLink>
           <NavLink href="/search"><Search />Search</NavLink>
+          <NavLink href="/settings"><Settings />Settings</NavLink>
         </nav>
         <div className="mt-auto flex items-center gap-2 rounded-lg border bg-background p-2">
           <PersonAvatar name={me.name} color="#7C3AED" className="size-8" />

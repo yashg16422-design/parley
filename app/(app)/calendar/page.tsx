@@ -21,7 +21,7 @@ export default async function CalendarPage() {
   return (
     <>
       <PageHeader title="Calendar" subtitle="Meetings on your calendar are recorded unless you turn them off.">
-        {conn && <Badge variant="secondary" className="gap-1.5"><CheckCircle2 className="text-green-600" />{conn.provider === "google" ? "Google Calendar" : "Outlook"} · {conn.accountEmail}</Badge>}
+        {conn && <Badge variant="secondary" className="gap-1.5"><CheckCircle2 className="text-green-600" />{{ google: "Google Calendar", outlook: "Outlook", ics: "iCal feed" }[conn.provider]} · {conn.accountEmail}</Badge>}
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-6 p-6">
         {!events.length && (

@@ -59,7 +59,7 @@ const updatedAt = () =>
 // Enums
 // ---------------------------------------------------------------------------
 
-export const calendarProvider = pgEnum("calendar_provider", ["google", "outlook"]);
+export const calendarProvider = pgEnum("calendar_provider", ["google", "outlook", "ics"]);
 export const connectionStatus = pgEnum("connection_status", ["connected", "syncing", "disconnected"]);
 export const meetingPlatform = pgEnum("meeting_platform", ["zoom", "google_meet", "teams"]);
 export const meetingStatus = pgEnum("meeting_status", [
@@ -105,6 +105,9 @@ export const calendarConnections = pgTable(
     autoRecord: text("auto_record", { enum: ["all", "external", "none"] }).notNull().default("all"),
     connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    /** ics provider: the secret feed address, encrypted (it is a read credential). */
+    feedUrlSecret: text("feed_url_secret"),
+    lastSyncError: text("last_sync_error"),
   },
   (t) => [uniqueIndex("calendar_connections_user_provider_uq").on(t.userId, t.provider)],
 );
@@ -452,6 +455,42 @@ export const processingJobs = pgTable(
 // ---------------------------------------------------------------------------
 // Relations (Drizzle relational query API)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Open core: tenant keys (BYOK) and personal access tokens
+// ---------------------------------------------------------------------------
+
+export const secretKind = pgEnum("secret_kind", ["deepgram", "huggingface"]);
+
+/** A user's own provider key, AES-256-GCM encrypted (src/vault.ts). Preferred over the server's env keys. */
+export const userSecrets = pgTable(
+  "user_secrets",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: secretKind("kind").notNull(),
+    ciphertext: text("ciphertext").notNull(),
+    last4: text("last4").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.kind] })],
+);
+
+/** Bearer tokens for scripts and the capture extension. Only the SHA-256 is stored. */
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    prefix: text("prefix").notNull(),
+    scopes: text("scopes", { enum: ["ingest", "calendar"] }).array().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("api_tokens_user_idx").on(t.userId)],
+);
 
 export const usersRelations = relations(users, ({ many }) => ({
   calendarConnections: many(calendarConnections),

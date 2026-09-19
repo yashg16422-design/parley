@@ -4,12 +4,17 @@ import { hfClient, type LlmClient } from "./ai/llm";
 import { processMeeting, processWindows } from "./ai/pipeline";
 import type { Database } from "./db";
 import * as s from "./db/schema";
+import { resolveKey } from "./keys";
 import { notifyMeeting } from "./live-bus";
 
 const rows = <T>(r: unknown) => (r as { rows: T[] }).rows;
 
-/** The live model if a token is configured, otherwise null (simulated outputs). */
-export const defaultLlm = (): LlmClient | null => (process.env.HF_TOKEN ? hfClient() : null);
+/** The live model for a meeting: its owner's own HF key, else the server's, else null (simulated outputs). */
+export async function llmFor(db: Database, meetingId: string): Promise<LlmClient | null> {
+  const m = await db.query.meetings.findFirst({ where: eq(s.meetings.id, meetingId), columns: { ownerId: true } });
+  const k = await resolveKey(db, m?.ownerId, "huggingface");
+  return k ? hfClient({ token: k.key }) : null;
+}
 
 /**
  * Claim this meeting's queued jobs (SKIP LOCKED, so concurrent drains never
@@ -17,7 +22,8 @@ export const defaultLlm = (): LlmClient | null => (process.env.HF_TOKEN ? hfClie
  * only pays for windows that don't have notes yet; a merge job finishes the
  * meeting. Failures are re-queued with backoff until max_attempts.
  */
-export async function drainMeeting(db: Database, meetingId: string, llm: LlmClient | null = defaultLlm()) {
+export async function drainMeeting(db: Database, meetingId: string, llmOverride?: LlmClient | null) {
+  const llm = llmOverride === undefined ? await llmFor(db, meetingId) : llmOverride;
   const claimed = rows<{ id: string; kind: string }>(
     await db.execute(sql`
       UPDATE processing_jobs SET status = 'running', attempts = attempts + 1, locked_until = now() + interval '5 minutes', updated_at = now()

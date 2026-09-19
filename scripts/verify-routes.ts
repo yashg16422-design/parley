@@ -8,6 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createIngestClient } from "../src/capture/dual-stream";
 import { wordsToLines } from "../src/lib/deepgram";
 import { checkClipRange, muxClipAssetRequest, muxClipPlaybackUrl } from "../src/media";
 import { stableId } from "../src/lib/stable-id";
@@ -26,7 +27,7 @@ const post = async (body: object, uid: string | null = MAYA) => {
   return { status: r.status, body: (await r.json()) as Record<string, unknown> };
 };
 const summary = async (meetingId: string, templateId?: string) => {
-  const r = await fetch(`${BASE}/api/summary?meetingId=${meetingId}${templateId ? `&templateId=${templateId}` : ""}`);
+  const r = await fetch(`${BASE}/api/summary?meetingId=${meetingId}${templateId ? `&templateId=${templateId}` : ""}`, { headers: { cookie: `parley_uid=${MAYA}` } });
   if (!r.headers.get("content-type")?.includes("ndjson")) return { status: r.status, events: [] as Record<string, unknown>[] };
   return { status: r.status, events: (await r.text()).trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>) };
 };
@@ -65,6 +66,54 @@ function pureChecks() {
   assert.equal(checkClipRange({ startMs: 0, endMs: 5_000 }, 60_000), null);
   assert.ok(checkClipRange({ startMs: 50_000, endMs: 70_000 }, 60_000) && checkClipRange({ startMs: 5_000, endMs: 5_000 }, 60_000));
   console.log("✓ deepgram diarized words → speaker-turn lines with call-clock ms; Mux clip contract (asset + instant playback), range checks");
+}
+
+/** Hardening + open-core surface: ownership, access tokens, the extension's ingest client, the iCal route. */
+async function openCore(mayasMeeting: string) {
+  const RAJ = stableId("user:raj@driftwood.example");
+  const live = await post({ op: "start_mic", title: "Ownership check", participants: ["Maya Chen"] });
+  const id = live.body.meetingId as string;
+  const line = { op: "append", meetingId: id, clockMs: 1000, speed: 1, fromSeq: 0, lines: [{ speakerIdx: 0, startMs: 0, endMs: 900, text: "injected" }] };
+  assert.equal((await post(line, RAJ)).status, 404, "another user can't write into Maya's call");
+  assert.equal((await post({ op: "end", meetingId: id, clockMs: 1000 }, RAJ)).status, 404, "…or end it");
+  assert.equal((await post(line, null)).status, 401);
+  const peek = async (uid: string | null, path: string) => (await fetch(`${BASE}${path}`, { headers: uid ? { cookie: `parley_uid=${uid}` } : {} })).status;
+  assert.deepEqual([await peek(RAJ, `/api/ingest?meetingId=${id}`), await peek(null, `/api/summary?meetingId=${mayasMeeting}`), await peek(RAJ, `/api/summary?meetingId=${mayasMeeting}`)], [404, 401, 404]);
+  console.log("✓ hardening: append/end/status/summary are owner- or attendee-only (other user → 404, no session → 401)");
+
+  const mint = async (scopes: string[], auth: Record<string, string> = { cookie: `parley_uid=${MAYA}` }) =>
+    fetch(`${BASE}/api/tokens`, { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ name: "verify", scopes }) });
+  const { id: tokenId, token } = (await (await mint(["ingest"])).json()) as { id: string; token: string };
+  assert.match(token, /^parley_pat_[\w-]{32}$/);
+  assert.equal((await mint(["ingest"], { authorization: `Bearer ${token}` })).status, 401, "a token can't mint tokens");
+
+  // The companion extension's path: bearer token, no cookie, from "another origin".
+  const ext = createIngestClient({ baseUrl: BASE, token });
+  const started = await ext.start("Captured from a Meet tab", ["Maya Chen", "Dana (Acme)"]);
+  ext.add([{ speakerIdx: 0, startMs: 200, endMs: 1500, text: "Thanks for joining, Dana." }, { speakerIdx: 1, startMs: 1700, endMs: 3000, text: "Happy to. We need SSO before we sign." }]);
+  await sleep(3200);
+  await ext.flush();
+  ext.add([{ speakerIdx: 0, startMs: 3100, endMs: 4000, text: "I'll send the SSO timeline tomorrow." }]);
+  const ended = (await ext.end()) as { segments: number };
+  assert.deepEqual([started.participants.length, ended.segments], [2, 3], "token-authenticated start → append (2 batches) → end");
+  const dg = await fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
+  assert.ok([200, 503].includes(dg.status), `deepgram token via access token → ${dg.status}`);
+
+  const cal = (await (await mint(["calendar"])).json()) as { token: string };
+  const asCal = await fetch(`${BASE}/api/ingest`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${cal.token}` }, body: JSON.stringify({ op: "start_mic", title: "x", participants: ["x"] }) });
+  assert.equal(asCal.status, 401, "calendar-scoped token can't ingest");
+  await fetch(`${BASE}/api/tokens?id=${tokenId}`, { method: "DELETE", headers: { cookie: `parley_uid=${MAYA}` } });
+  assert.equal((await createIngestClient({ baseUrl: BASE, token }).start("x", ["x"]).catch((e: Error) => e.message)), "no workspace session or valid ingest token", "revoked token rejected");
+  console.log("✓ access tokens: extension client ingests with Bearer (3 lines, 2 batches), scopes enforced, revocation immediate, tokens can't mint tokens");
+
+  const ics = (body: object, auth: Record<string, string>) => fetch(`${BASE}/api/calendar/ics`, { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify(body) });
+  const asCookie = { cookie: `parley_uid=${MAYA}` };
+  assert.equal((await ics({ url: "http://169.254.169.254/latest/meta-data" }, asCookie)).status, 400, "non-allowlisted feed host");
+  assert.equal((await ics({}, asCookie)).status, 404, "no feed connected yet");
+  assert.equal((await ics({}, {})).status, 401);
+  assert.equal((await ics({}, { authorization: `Bearer ${cal.token}` })).status, 404, "calendar token accepted by the iCal route");
+  console.log("✓ iCal route: host allowlist → 400, not connected → 404, calendar-scoped token accepted, no auth → 401");
+  for (const path of ["/settings", "/live/mic"]) assert.equal(await peek(MAYA, path), 200, path);
 }
 
 async function main() {
@@ -122,7 +171,7 @@ async function main() {
   let state: { status: string; jobs: { kind: string; status: string; lastError: string | null }[] } = { status: "", jobs: [] };
   for (let i = 0; i < 40 && state.status !== "ready"; i++) {
     await sleep(250);
-    state = await (await fetch(`${BASE}/api/ingest?meetingId=${meetingId}`)).json();
+    state = await (await fetch(`${BASE}/api/ingest?meetingId=${meetingId}`, { headers: { cookie: `parley_uid=${MAYA}` } })).json();
   }
   assert.equal(state.status, "ready", JSON.stringify(state));
   assert.ok(state.jobs.length === 3 && state.jobs.every((j) => j.status === "succeeded"), JSON.stringify(state.jobs));
@@ -180,7 +229,7 @@ async function main() {
   assert.equal((await post({ op: "append", meetingId: micId, clockMs: 10 * 60_000, speed: 1, fromSeq: seq, lines: [{ speakerIdx: 0, startMs: 1, endMs: 2, text: "x" }] })).status, 429, "1x clock is enforced for mic calls too");
   assert.equal((await post({ op: "end", meetingId: micId, clockMs: Date.now() - m0 })).status, 200);
   let micState = { status: "" };
-  for (let i = 0; i < 40 && micState.status !== "ready"; i++) (await sleep(250)), (micState = await (await fetch(`${BASE}/api/ingest?meetingId=${micId}`)).json());
+  for (let i = 0; i < 40 && micState.status !== "ready"; i++) (await sleep(250)), (micState = await (await fetch(`${BASE}/api/ingest?meetingId=${micId}`, { headers: { cookie: `parley_uid=${MAYA}` } })).json());
   assert.equal(micState.status, "ready");
   assert.equal(await watcher.done, 200);
   const streamed = watcher.events.filter((e) => e.event === "lines").flatMap((e) => (e.data as { seq: number; text: string }[]).map((l) => ({ ...l, at: e.at })));
@@ -199,6 +248,7 @@ async function main() {
   assert.ok(micSections.find((x) => x.id === "decisions")!.items.some((i) => /ship the beta on schedule/.test(i.text)));
   console.log(`✓ mic call: 4 lines at 1x, linked to calendar event, rule-based notes → ${nextSteps.length} next steps, decision captured`);
 
+  await openCore(micId);
   console.log("\nRoutes verified.");
 }
 

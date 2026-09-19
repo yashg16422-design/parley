@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SPEAKER_COLORS } from "@/lib/colors";
+import { MIC, pickMeetingTab, startDualCapture } from "@/capture/dual-stream";
 import { openDeepgram, TranscriptionUnavailable, type DgLine } from "@/lib/deepgram";
 import { clock } from "@/lib/format";
 
@@ -23,7 +24,7 @@ const ERRORS = {
   missing: "No microphone was found. Plug one in, or type what's said instead.",
 };
 const canStream = () => typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined" && typeof WebSocket !== "undefined";
-type Session = Awaited<ReturnType<typeof openDeepgram>>;
+type Session = { stop(): Promise<void> };
 
 async function ingest(body: object) {
   const r = await fetch("/api/ingest", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -41,6 +42,8 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   const [phase, setPhase] = useState<"setup" | "live" | "ending">("setup");
   const [supported, setSupported] = useState(true);
   const [mode, setMode] = useState<"mic" | "typed">("mic");
+  const [tabAudio, setTabAudio] = useState(false);
+  const [canTab, setCanTab] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
   const [speaker, setSpeaker] = useState(0);
   const [ids, setIds] = useState<string[]>([]);
@@ -50,13 +53,14 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   const [now, setNow] = useState(0);
   const s = useRef({
     meetingId: "", t0: 0, sent: 0, pending: [] as Line[], busy: false, live: false, speaker: 0, lastStart: 0, n: 0,
-    dg: null as Session | null, mic: null as MediaStream | null,
+    dg: null as Session | null, mic: null as MediaStream | null, tab: null as MediaStream | null,
     /** Deepgram speaker number → participant index; the user corrects it by tapping who's talking. */
     map: new Map<number, number>(), lastDg: null as number | null,
   });
 
   useEffect(() => {
     const ok = canStream();
+    setCanTab(ok && typeof navigator.mediaDevices.getDisplayMedia === "function");
     setSupported(ok);
     if (!ok) setMode("typed");
   }, []);
@@ -64,11 +68,16 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
     s.current.speaker = speaker;
     s.current.n = speakers.length;
   }, [speaker, speakers.length]);
-  const who = (dg: number) => s.current.map.get(dg) ?? dg % Math.max(1, s.current.n);
+  /** Voice → participant. Your mic is always you (0); with tab audio, diarized voices fill the other seats. */
+  const who = (dg: number) => {
+    const S = s.current;
+    if (dg === MIC) return 0;
+    return S.map.get(dg) ?? (S.tab && S.n > 1 ? 1 + (dg % (S.n - 1)) : dg % Math.max(1, S.n));
+  };
   /** Tap a person: in typed mode it's who speaks next; with Deepgram it relabels the voice heard last. */
   const pick = (i: number) => {
     const S = s.current;
-    if (mode === "mic" && S.lastDg !== null) S.map.set(S.lastDg, i);
+    if (mode === "mic" && S.lastDg !== null && S.lastDg !== MIC) S.map.set(S.lastDg, i);
     setSpeaker(i);
   };
   useEffect(() => {
@@ -127,6 +136,14 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
 
   async function listen() {
     const S = s.current;
+    if (S.tab) {
+      S.dg = await startDualCapture({ mic: S.mic!, tab: S.tab }, () => Date.now() - S.t0, {
+        onLines: addHeard,
+        onInterim: (_, text, dg) => (setInterim(text), dg !== null && ((S.lastDg = dg), setSpeaker(who(dg)))),
+        onWarn: setWarn,
+      });
+      return;
+    }
     S.dg = await openDeepgram(S.mic!, () => Date.now() - S.t0, {
       onLines: addHeard,
       onInterim: (text, dg) => {
@@ -142,7 +159,9 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
     });
   }
 
-  const stopMic = () => (s.current.mic?.getTracks().forEach((t) => t.stop()), (s.current.mic = null));
+  const stopMic = () => {
+    for (const k of ["mic", "tab"] as const) s.current[k]?.getTracks().forEach((t) => t.stop()), (s.current[k] = null);
+  };
 
   async function start() {
     setWarn(null);
@@ -155,6 +174,11 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
         setWarn(e instanceof DOMException && e.name === "NotFoundError" ? ERRORS.missing : ERRORS.blocked);
         useMic = false;
         setMode("typed");
+      }
+      // Remote participants: the meeting tab's audio, as a second stream (works even on headphones).
+      if (useMic && tabAudio) {
+        S.tab = await pickMeetingTab().catch(() => null);
+        if (!S.tab) setWarn("No meeting tab audio was shared (pick the call's tab and tick \"Also share tab audio\"). Recording your microphone only.");
       }
     }
     try {
@@ -253,6 +277,12 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
               <p>Join your call in its usual app, then press <b>Record live microphone</b>. Audio streams to Deepgram (nova-3) for live transcription; lines reach Parley in small batches and anyone watching the meeting sees them live.</p>
               <p>Deepgram tells voices apart on its own. If it labels someone wrong, tap who&apos;s actually talking (or press 1–{speakers.length}) and that voice stays with them.</p>
               <p className="text-xs">Audio goes from your browser straight to Deepgram; Parley stores only the text.</p>
+              {canTab && mode === "mic" && (
+                <label className="flex cursor-pointer items-center justify-center gap-2 text-foreground">
+                  <input type="checkbox" checked={tabAudio} onChange={(e) => setTabAudio(e.target.checked)} className="accent-primary" />
+                  Also capture the meeting tab&apos;s audio (hears everyone, even on headphones)
+                </label>
+              )}
               {supported && <button onClick={() => setMode(mode === "mic" ? "typed" : "mic")} className="text-xs text-primary hover:underline">{mode === "mic" ? "No mic? Type lines instead" : "Use the microphone instead"}</button>}
             </div>
           ) : (

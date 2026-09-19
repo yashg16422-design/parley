@@ -4,7 +4,8 @@ import { getDb } from "@/db";
 import { badRequest, errorResponse, jsonError } from "@/http";
 import { drainMeeting } from "@/jobs";
 import { appendLines, endCall, ingestSchema, startMic, startSimulation } from "@/live";
-import { currentUserId, findUser } from "@/session";
+import { requestUser } from "@/auth";
+import { visibleMeeting } from "@/queries";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,12 +18,13 @@ export async function POST(req: Request) {
   const input = parsed.data;
   const db = getDb();
   try {
+    // Session cookie (browser) or `Bearer parley_pat_…` with the ingest scope (scripts, capture extension).
+    const me = await requestUser(req, "ingest");
+    if (!me) return jsonError(401, "no workspace session or valid ingest token");
     if (input.op === "start" || input.op === "start_mic") {
-      const me = await findUser(await currentUserId());
-      if (!me) return jsonError(401, "no workspace session; open / first");
       return Response.json(input.op === "start" ? await startSimulation(db, me.id, input) : await startMic(db, me, input), { status: 201 });
     }
-    const result = input.op === "append" ? await appendLines(db, input) : await endCall(db, input);
+    const result = input.op === "append" ? await appendLines(db, me.id, input) : await endCall(db, me.id, input);
     // Window processing runs after the response is sent; the client never waits on the model.
     if (result.queued > 0) {
       after(async () => {
@@ -40,6 +42,9 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const id = z.uuid().safeParse(new URL(req.url).searchParams.get("meetingId"));
   if (!id.success) return badRequest(id.error);
+  const me = await requestUser(req, "ingest");
+  if (!me) return jsonError(401, "no workspace session or valid ingest token");
+  if (!(await visibleMeeting(id.data, me.id))) return jsonError(404, "meeting not found");
   const m = await getDb().query.meetings.findFirst({
     where: (t, { eq }) => eq(t.id, id.data),
     columns: { id: true, status: true, liveClockMs: true, liveSpeed: true, durationMs: true },

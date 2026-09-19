@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { getDb } from "@/db";
 import { badRequest, errorResponse, jsonError } from "@/http";
-import { defaultLlm } from "@/jobs";
+import { requestUser } from "@/auth";
+import { llmFor } from "@/jobs";
+import { visibleMeeting } from "@/queries";
 import { HttpError } from "@/live";
 import { resolveSummary } from "@/summaries";
 
@@ -19,10 +21,13 @@ export async function GET(req: Request) {
   const q = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));
   if (!q.success) return badRequest(q.error);
   const db = getDb();
+  const me = await requestUser(req, "ingest");
+  if (!me) return jsonError(401, "no workspace session");
+  if (!(await visibleMeeting(q.data.meetingId, me.id))) return jsonError(404, "meeting not found");
   const meeting = await db.query.meetings.findFirst({ where: (t, { eq }) => eq(t.id, q.data.meetingId), columns: { defaultTemplateId: true } });
   if (!meeting) return jsonError(404, "meeting not found");
   const templateId = q.data.templateId ?? meeting.defaultTemplateId;
-  const llm = defaultLlm();
+  const llm = await llmFor(db, q.data.meetingId);
 
   const enc = new TextEncoder();
   const stream = new ReadableStream({

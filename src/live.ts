@@ -41,9 +41,10 @@ export type IngestInput = z.infer<typeof ingestSchema>;
 /** Slack for network jitter when checking the replay clock against wall time. */
 const CLOCK_SLACK_MS = 5_000;
 
-async function liveMeeting(db: Database, id: string) {
+/** Only the meeting's owner may write to it; anyone else gets the same 404 as a missing meeting. */
+async function liveMeeting(db: Database, id: string, ownerId: string) {
   const m = await db.query.meetings.findFirst({ where: eq(s.meetings.id, id), with: { participants: true } });
-  if (!m) throw new HttpError(404, "meeting not found");
+  if (!m || m.ownerId !== ownerId) throw new HttpError(404, "meeting not found");
   if (m.status !== "live") throw new HttpError(409, `meeting is ${m.status}, not live`);
   return m;
 }
@@ -106,8 +107,8 @@ export async function startMic(db: Database, owner: { id: string; name: string; 
  * server checks it can't run faster than the chosen speed allows, that seqs are
  * contiguous (resends are harmless), and that no line is ahead of the clock.
  */
-export async function appendLines(db: Database, input: Extract<IngestInput, { op: "append" }>, now = new Date()) {
-  const m = await liveMeeting(db, input.meetingId);
+export async function appendLines(db: Database, ownerId: string, input: Extract<IngestInput, { op: "append" }>, now = new Date()) {
+  const m = await liveMeeting(db, input.meetingId, ownerId);
   const prevClock = m.liveClockMs ?? 0;
   const elapsed = now.getTime() - (m.liveUpdatedAt ?? m.startedAt ?? now).getTime();
   const allowed = elapsed * Math.max(input.speed, m.liveSpeed ?? 1) + CLOCK_SLACK_MS;
@@ -136,8 +137,8 @@ export async function appendLines(db: Database, input: Extract<IngestInput, { op
 }
 
 /** End the call: compute stats once, move to processing, queue remaining windows + merge. */
-export async function endCall(db: Database, { meetingId, clockMs }: Extract<IngestInput, { op: "end" }>) {
-  const m = await liveMeeting(db, meetingId);
+export async function endCall(db: Database, ownerId: string, { meetingId, clockMs }: Extract<IngestInput, { op: "end" }>) {
+  const m = await liveMeeting(db, meetingId, ownerId);
   const segs = await db.select().from(s.transcriptSegments).where(eq(s.transcriptSegments.meetingId, meetingId)).orderBy(asc(s.transcriptSegments.seq));
   if (!segs.length) throw new HttpError(409, "no transcript to process");
   const totals = participantTotals(segs);
