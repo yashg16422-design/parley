@@ -7,3 +7,5 @@ node_modules/
 *.tsbuildinfo
 .pglite/
 next-env.d.ts
+.vercel
+.env*
