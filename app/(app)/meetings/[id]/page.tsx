@@ -10,7 +10,7 @@ export default async function MeetingPage({ params, searchParams }: { params: Pr
   const m = await meetingDetail(id, me.id);
   if (!m) notFound();
   if (m.status === "live" || m.status === "processing") {
-    return <LiveWatch id={m.id} title={m.title} participants={m.participants} initial={m.segments} initialStatus={m.status} />;
+    return <LiveWatch id={m.id} title={m.title} participants={m.participants} initial={m.segments} initialStatus={m.status} isOwner={m.ownerId === me.id} lastActivity={(m.liveUpdatedAt ?? m.startedAt ?? new Date()).toISOString()} />;
   }
   return (
     <MeetingView

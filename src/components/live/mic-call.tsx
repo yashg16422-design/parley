@@ -70,7 +70,7 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
     dg: null as Session | null, mic: null as MediaStream | null, tab: null as MediaStream | null,
     graph: null as ReturnType<typeof captureGraph> | null, archive: null as Archive | null,
     /** Deepgram speaker number → participant index; the user corrects it by tapping who's talking. */
-    map: new Map<number, number>(), lastDg: null as number | null,
+    map: new Map<number, number>(), lastDg: null as number | null, closing: false,
   });
 
   useEffect(() => {
@@ -158,7 +158,10 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
       } while (all && S.pending.length);
       setWarn((w) => (w?.startsWith("Couldn't send") ? null : w));
     } catch (e) {
-      setWarn(`Couldn't send the latest lines (${e instanceof Error ? e.message : e}). Retrying…`);
+      const msg = e instanceof Error ? e.message : String(e);
+      // Ended or discarded from the meeting page (or by the sweeper): stop recording instead of retrying forever.
+      if (/not live|meeting not found/.test(msg)) return void endedElsewhere();
+      setWarn(`Couldn't send the latest lines (${msg}). Retrying…`);
     } finally {
       S.busy = false;
     }
@@ -278,6 +281,18 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
       setWarn(`Couldn't finish: ${e instanceof Error ? e.message : e}`);
       setPhase("live");
     }
+  }
+
+  async function endedElsewhere() {
+    const S = s.current;
+    if (S.closing) return;
+    S.closing = true, (S.live = false), (S.pending.length = 0);
+    setEndingLabel("This call was ended from another tab. Opening its notes…");
+    setPhase("ending");
+    await S.dg?.stop().catch(() => {});
+    await S.archive?.stop(5_000).catch(() => {});
+    stopMic();
+    router.push(`/meetings/${S.meetingId}`);
   }
 
   async function discard() {
