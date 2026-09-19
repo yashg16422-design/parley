@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
+import { audit } from "@/audit";
 import { getDb } from "@/db";
+import { clientIp } from "@/rate-limit";
 import { finishGoogleAuth, upsertGoogleUser } from "@/google-auth";
 import { currentUserId, setSession } from "@/session";
 import { appOrigin as origin } from "@/auth-urls";
@@ -22,6 +24,7 @@ export async function GET(req: Request) {
     const profile = await finishGoogleAuth(url.searchParams.get("code")!, saved.verifier, `${origin(req)}/api/auth/google/callback`);
     const r = await upsertGoogleUser(getDb(), profile, await currentUserId());
     await setSession(r.userId);
+    await audit(getDb(), r.userId, r.created ? "account.created" : "sign_in", profile.email, { via: "google", keptGuestData: r.keptGuestData }, clientIp(req.headers));
     return Response.redirect(`${origin(req)}${saved.next}`, 303);
   } catch (e) {
     console.error("google sign-in:", e instanceof Error ? e.message : e);

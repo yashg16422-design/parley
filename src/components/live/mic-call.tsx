@@ -31,6 +31,9 @@ const ERRORS = {
   blocked: "Microphone access is blocked. Allow the mic for this site (address bar → site settings), then try again.",
   missing: "No microphone was found. Plug one in, or type what's said instead.",
 };
+/** Paste-ready disclosure for the call's chat. */
+const CONSENT_MESSAGE = "Heads up: I'm recording and transcribing this call with Parley so I can share accurate notes afterwards. Let me know now if you'd rather I didn't.";
+
 const canStream = () => typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined" && typeof WebSocket !== "undefined";
 type Session = { stop(): Promise<void> };
 
@@ -56,6 +59,8 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
   const [supported, setSupported] = useState(true);
   const [mode, setMode] = useState<"mic" | "typed">("mic");
   const [tabAudio, setTabAudio] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [canTab, setCanTab] = useState(false);
   const [join, setJoin] = useState<{ platform: Platform; url: string } | null>(null);
   const [joinInput, setJoinInput] = useState("");
@@ -322,7 +327,7 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
         {phase === "setup" && <Button variant="ghost" size="icon" asChild><Link href="/home" aria-label="Back"><ArrowLeft /></Link></Button>}
         {phase === "setup" ? <Badge variant="secondary"><Mic />New recording</Badge> : paused ? <Badge className="bg-amber-500 text-white"><Pause />PAUSED {clock(now)}</Badge> : <Badge className="gap-1.5 bg-red-600 text-white"><span className="size-1.5 animate-pulse rounded-full bg-white" />REC {clock(now)}</Badge>}
         {phase === "setup" ? <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 max-w-sm flex-1 font-semibold" /> : <h1 className="min-w-0 flex-1 truncate font-semibold">{title}</h1>}
-        {phase === "setup" && <Button onClick={start} disabled={!title.trim() || starting} aria-busy={starting}>{starting ? <InlineDots /> : supported && mode === "mic" ? <><Mic />Record live microphone</> : <><Keyboard />Start (type lines)</>}</Button>}
+        {phase === "setup" && <Button onClick={start} disabled={!title.trim() || starting || (supported && mode === "mic" && !consent)} aria-busy={starting} title={supported && mode === "mic" && !consent ? "Confirm that everyone knows the call is recorded" : undefined}>{starting ? <InlineDots /> : supported && mode === "mic" ? <><Mic />Record live microphone</> : <><Keyboard />Start (type lines)</>}</Button>}
         {phase === "live" && (
           <>
             <Button variant="ghost" asChild><a href={`/meetings/${s.current.meetingId}`} target="_blank" rel="noreferrer"><Radio />Live view</a></Button>
@@ -365,6 +370,15 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
               {!join && <p>Join your call in its usual app, then press <b>Record live microphone</b>. Audio streams to Deepgram (nova-3) for live transcription; lines reach Parley in small batches and anyone watching the meeting sees them live.</p>}
               <p>Deepgram tells voices apart on its own. If it labels someone wrong, tap who&apos;s actually talking (or press 1–{speakers.length}) and that voice stays with them.</p>
               <p className="text-xs">Audio goes from your browser straight to Deepgram; Parley stores only the text.</p>
+              {supported && mode === "mic" && (
+                <div className="rounded-lg border bg-muted/40 p-3 text-left text-foreground">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 accent-primary" />
+                    <span>Everyone on this call knows it&apos;s being recorded and transcribed. <span className="text-muted-foreground">Many places require all participants&apos; consent.</span></span>
+                  </label>
+                  <button onClick={() => navigator.clipboard.writeText(CONSENT_MESSAGE).then(() => setCopied(true))} className="mt-2 text-xs text-primary hover:underline">{copied ? "Copied. Paste it in the meeting chat." : "Copy a notice to paste in the meeting chat"}</button>
+                </div>
+              )}
               {canTab && mode === "mic" && (
                 <label className="flex cursor-pointer items-center justify-center gap-2 text-foreground">
                   <input type="checkbox" checked={tabAudio} onChange={(e) => setTabAudio(e.target.checked)} className="accent-primary" />

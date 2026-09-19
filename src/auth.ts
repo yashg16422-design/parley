@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import * as s from "./db/schema";
 import { currentUserId, findUser } from "./session";
 
-export type Scope = "ingest" | "calendar";
+export type Scope = "ingest" | "calendar" | "read";
 const PREFIX = "parley_pat_";
 const hash = (t: string) => createHash("sha256").update(t).digest("hex");
 

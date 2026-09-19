@@ -71,6 +71,13 @@
       "when": 1789810525163,
       "tag": "0009_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789811423353,
+      "tag": "0010_integrations_compliance",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,8 @@ import * as s from "./db/schema";
 import { open, seal } from "./vault";
 
 export type SecretKind = (typeof s.secretKind.enumValues)[number];
-const ENV: Record<SecretKind, string> = { deepgram: "DEEPGRAM_API_KEY", huggingface: "HF_TOKEN", anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" };
+// Per-user integrations (Notion, HubSpot) have no server-wide fallback: one workspace's notes must never land in another's tools.
+const ENV: Partial<Record<SecretKind, string>> = { deepgram: "DEEPGRAM_API_KEY", huggingface: "HF_TOKEN", anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY", slack: "SLACK_WEBHOOK_URL" };
 
 /**
  * BYOK resolution: the tenant's own key wins, then the server's env key, else
@@ -16,7 +17,7 @@ export async function resolveKey(db: Database, userId: string | null | undefined
     const row = await db.query.userSecrets.findFirst({ where: and(eq(s.userSecrets.userId, userId), eq(s.userSecrets.kind, kind)) });
     if (row) return { key: open(row.ciphertext), source: "tenant" as const };
   }
-  const env = process.env[ENV[kind]];
+  const env = ENV[kind] ? process.env[ENV[kind]!] : undefined;
   return env ? { key: env, source: "env" as const } : null;
 }
 

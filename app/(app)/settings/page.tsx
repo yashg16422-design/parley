@@ -1,8 +1,9 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { disconnectFeed, removeProviderKey, revoke } from "@app/actions/settings";
+import { disconnectFeed, removeIntegration, removeProviderKey, revoke, setRetention } from "@app/actions/settings";
 import { setTheme } from "@app/actions/workspace";
 import { cookies } from "next/headers";
-import { FeedForm, KeyForm, TokenForm } from "@/components/settings-forms";
+import { DeleteAccountForm, FeedForm, IntegrationForm, KeyForm, TokenForm } from "@/components/settings-forms";
+import { recentAudit } from "@/audit";
 import { GuestNotice } from "@/components/mode-badge";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,12 @@ import * as s from "@/db/schema";
 import { fmtDay, fmtTime } from "@/lib/format";
 import { currentUser } from "@/queries";
 import { vaultReady } from "@/vault";
+
+const INTEGRATIONS = [
+  { kind: "slack", name: "Slack", hint: "Briefing with summary, talk time and action items. Slack → Apps → Incoming Webhooks → Add to a channel. Overrides the server's webhook." },
+  { kind: "notion", name: "Notion", hint: "A page per meeting in a database of yours. Create an internal integration at notion.so/profile/integrations, then add it to the database (⋯ → Connections)." },
+  { kind: "hubspot", name: "HubSpot", hint: "A note with the summary and action items on every attendee who's a HubSpot contact. Private app with crm.objects.contacts.read/write." },
+] as const;
 
 const PROVIDERS = [
   { kind: "deepgram", name: "Deepgram", env: "DEEPGRAM_API_KEY", hint: "Live transcription. Needs the Member role so it can issue browser tokens.", placeholder: "Deepgram API key" },
@@ -25,10 +32,11 @@ const PROVIDERS = [
 export default async function Settings() {
   const me = await currentUser();
   const db = getDb();
-  const [secrets, feed, tokens] = await Promise.all([
+  const [secrets, feed, tokens, activity] = await Promise.all([
     db.query.userSecrets.findMany({ where: eq(s.userSecrets.userId, me.id), columns: { kind: true, last4: true, updatedAt: true } }),
     db.query.calendarConnections.findFirst({ where: and(eq(s.calendarConnections.userId, me.id), eq(s.calendarConnections.provider, "ics")) }),
     db.query.apiTokens.findMany({ where: and(eq(s.apiTokens.userId, me.id), isNull(s.apiTokens.revokedAt)), orderBy: desc(s.apiTokens.createdAt) }),
+    recentAudit(db, me.id, 20),
   ]);
   const vault = vaultReady();
   const canSave = vault && me.kind !== "guest";
@@ -86,6 +94,53 @@ export default async function Settings() {
               <form action={revoke} className="ml-auto"><input type="hidden" name="id" value={t.id} /><SubmitButton size="sm" variant="ghost">Revoke</SubmitButton></form>
             </div>
           ))}
+        </Card>
+        <Card className="gap-4 p-5">
+          <div><h2 className="font-semibold">Integrations</h2><p className="text-sm text-muted-foreground">When a meeting&apos;s notes are ready, Parley sends them to the tools you connect here, using your own tokens.</p></div>
+          {INTEGRATIONS.map((i) => {
+            const on = secrets.some((x) => x.kind === i.kind);
+            return (
+              <div key={i.kind} className="space-y-2 border-t pt-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-medium">{i.name}</h3>
+                  <Badge variant={on ? "default" : "secondary"}>{on ? "Connected" : "Not connected"}</Badge>
+                  {on && <form action={removeIntegration} className="ml-auto"><input type="hidden" name="kind" value={i.kind} /><SubmitButton size="sm" variant="ghost">Disconnect</SubmitButton></form>}
+                </div>
+                <p className="text-xs text-muted-foreground">{i.hint}</p>
+                {canSave && !on && <IntegrationForm kind={i.kind} />}
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card className="gap-4 p-5">
+          <div><h2 className="font-semibold">Your data</h2><p className="text-sm text-muted-foreground">Stored in Parley&apos;s Postgres database (Neon). <a href="/privacy" className="text-primary hover:underline">What we store and where</a>.</p></div>
+          <form action={setRetention} className="flex flex-wrap items-center gap-2 text-sm">
+            Delete recorded meetings older than
+            <select name="days" defaultValue={me.retentionDays ? String(me.retentionDays) : "forever"} className="h-9 rounded-md border bg-background px-2">
+              <option value="forever">never (keep them)</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+            </select>
+            <SubmitButton size="sm" variant="outline">Save</SubmitButton>
+          </form>
+          <div className="flex flex-wrap items-center gap-3 border-t pt-4 text-sm">
+            <a href="/api/me/export" className="rounded-md border px-3 py-1.5 font-medium hover:bg-muted">Download all my data (JSON)</a>
+            <span className="text-muted-foreground">Transcripts, notes, action items, clips, scratchpads and calendar. Never your key values.</span>
+          </div>
+          {me.kind !== "demo" && <div className="border-t pt-4"><p className="mb-2 text-sm text-muted-foreground">Delete your account, every recording and every note, permanently.</p><DeleteAccountForm /></div>}
+        </Card>
+
+        <Card className="gap-3 p-5">
+          <h2 className="font-semibold">Security activity</h2>
+          {!activity.length && <p className="text-sm text-muted-foreground">Nothing yet.</p>}
+          <ul className="divide-y text-sm">
+            {activity.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-x-3 py-2">
+                <span className="font-mono text-xs text-muted-foreground">{fmtDay(a.createdAt)} {fmtTime(a.createdAt)}</span>
+                <span className="font-medium">{a.action.replace(/[._]/g, " ")}</span>
+                {a.target && <span className="truncate text-muted-foreground">{a.target}</span>}
+              </li>
+            ))}
+          </ul>
         </Card>
       </div>
     </>

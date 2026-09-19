@@ -217,7 +217,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
       </main>
 
       <footer className="relative z-10 border-t border-white/10 py-8 text-center text-xs text-white/40">
-        Parley stores transcripts and notes in your workspace only. Audio for transcription goes from your browser straight to Deepgram.
+        Parley stores transcripts and notes in your workspace only. Audio for transcription goes from your browser straight to Deepgram. <a href="/privacy" className="underline hover:text-white/70">Privacy &amp; your data</a>
       </footer>
     </div>
   );

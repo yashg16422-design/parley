@@ -97,6 +97,8 @@ export const users = pgTable("users", {
   googleSub: text("google_sub").unique(),
   /** Guests only: when the sweeper deletes the workspace and everything in it. */
   expiresAt: timestamp("expires_at", { withTimezone: true }),
+  /** Delete this user's recorded meetings older than N days (null = keep until deleted). */
+  retentionDays: smallint("retention_days"),
   createdAt: createdAt(),
 }, (t) => [index("users_guest_expiry_idx").on(t.expiresAt).where(sql`${t.expiresAt} IS NOT NULL`)]);
 
@@ -469,7 +471,7 @@ export const processingJobs = pgTable(
 // Open core: tenant keys (BYOK) and personal access tokens
 // ---------------------------------------------------------------------------
 
-export const secretKind = pgEnum("secret_kind", ["deepgram", "huggingface", "anthropic", "openai"]);
+export const secretKind = pgEnum("secret_kind", ["deepgram", "huggingface", "anthropic", "openai", "notion", "hubspot", "slack"]);
 
 /** A user's own provider key, AES-256-GCM encrypted (src/vault.ts). Preferred over the server's env keys. */
 export const userSecrets = pgTable(
@@ -493,7 +495,7 @@ export const apiTokens = pgTable(
     name: text("name").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
     prefix: text("prefix").notNull(),
-    scopes: text("scopes", { enum: ["ingest", "calendar"] }).array().notNull(),
+    scopes: text("scopes", { enum: ["ingest", "calendar", "read"] }).array().notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -521,6 +523,24 @@ export const scratchpads = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.meetingId, t.userId] })],
+);
+
+/**
+ * Security-relevant actions, shown to the user in Settings. After an account
+ * is deleted, user_id becomes null and the event row stays.
+ */
+export const auditEvents = pgTable(
+  "audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    target: text("target"),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+    ip: text("ip"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("audit_events_user_idx").on(t.userId, t.createdAt.desc())],
 );
 
 const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({

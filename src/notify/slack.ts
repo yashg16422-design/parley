@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "../db";
 import * as s from "../db/schema";
+import { resolveKey } from "../keys";
 
 /**
  * Post-meeting Slack briefing via an incoming webhook (SLACK_WEBHOOK_URL).
@@ -23,6 +24,9 @@ export type Briefing = {
   overview: string | null; agenda: string | null;
   talk: { name: string; talkMs: number }[];
   actions: { text: string; owner: string | null; due: string | null; verified: boolean }[];
+  ownerId: string;
+  /** Other attendees' emails (participants + calendar invitees), for CRM matching. */
+  emails: string[];
 };
 
 const PLATFORM: Record<string, string> = { zoom: "Zoom", google_meet: "Google Meet", teams: "Microsoft Teams" };
@@ -66,10 +70,11 @@ export async function loadBriefing(db: Database, meetingId: string): Promise<Bri
   const m = await db.query.meetings.findFirst({
     where: eq(s.meetings.id, meetingId),
     with: {
-      participants: { columns: { name: true, talkMs: true }, orderBy: asc(s.meetingParticipants.speakerIdx) },
+      participants: { columns: { name: true, talkMs: true, email: true }, orderBy: asc(s.meetingParticipants.speakerIdx) },
+      owner: { columns: { email: true } },
       actionItems: { orderBy: asc(s.actionItems.sortOrder), with: { assignee: { columns: { name: true } } } },
       knowledge: { columns: { knowledge: true } },
-      calendarEvent: { columns: { agenda: true } },
+      calendarEvent: { columns: { agenda: true, attendees: true } },
     },
   });
   if (!m) return null;
@@ -78,16 +83,20 @@ export async function loadBriefing(db: Database, meetingId: string): Promise<Bri
     overview: m.knowledge?.knowledge.overview ?? null, agenda: m.calendarEvent?.agenda ?? null,
     talk: m.participants.filter((p) => p.talkMs > 0).map((p) => ({ name: p.name, talkMs: p.talkMs })),
     actions: m.actionItems.map((a) => ({ text: a.text, owner: a.assignee?.name ?? a.assigneeName, due: a.dueText, verified: a.verified })),
+    ownerId: m.ownerId,
+    emails: [...new Set([...m.participants.map((p) => p.email), ...(m.calendarEvent?.attendees ?? []).map((a) => a.email)]
+      .filter((e): e is string => !!e).map((e) => e.toLowerCase()).filter((e) => e !== m.owner?.email?.toLowerCase()))],
   };
 }
 
 /** Send the briefing if a webhook is configured. Never throws: a Slack outage mustn't fail note processing. */
-export async function sendMeetingBriefing(db: Database, meetingId: string, fetcher: typeof fetch = fetch) {
-  const url = slackWebhook();
-  if (!url) return { sent: false as const, reason: "no SLACK_WEBHOOK_URL" };
+export async function sendMeetingBriefing(db: Database, meetingId: string, fetcher: typeof fetch = fetch, preloaded?: Briefing | null) {
   try {
-    const b = await loadBriefing(db, meetingId);
+    const b = preloaded ?? (await loadBriefing(db, meetingId));
     if (!b) return { sent: false as const, reason: "meeting not found" };
+    // The owner's own webhook (Settings) wins over the server's SLACK_WEBHOOK_URL.
+    const url = slackWebhook((await resolveKey(db, b.ownerId, "slack"))?.key);
+    if (!url) return { sent: false as const, reason: "no Slack webhook" };
     const r = await fetcher(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(briefingBlocks(b)), signal: AbortSignal.timeout(8_000) });
     if (!r.ok) throw new Error(`Slack ${r.status}: ${(await r.text()).slice(0, 200)}`);
     return { sent: true as const };

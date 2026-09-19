@@ -21,6 +21,8 @@ import { sweep } from "../src/sweep";
 import { briefingBlocks, slackWebhook } from "../src/notify/slack";
 import { templates } from "../seed/src/templates";
 import { upsertGoogleUser } from "../src/google-auth";
+import { deliverMeeting, hubspotNoteHtml, notionPage } from "../src/notify/integrations";
+import { loadBriefing } from "../src/notify/slack";
 import { readSession, signSession } from "../src/session-token";
 import { open, seal } from "../src/vault";
 
@@ -290,10 +292,46 @@ async function main() {
   const slack = JSON.stringify(posted[0]!.body);
   assert.ok(slack.includes("Went quiet after talking") && /release notes by Thursday[^"]*— \*Maya Chen\*/.test(slack) && slack.includes("*Talk time*") && slack.includes("https://parley.example/meetings/"), slack.slice(0, 400));
   assert.deepEqual([slackWebhook("https://evil.example/hook"), slackWebhook("http://hooks.slack.com/x"), slackWebhook("not a url")], [null, null, null], "only https Slack hosts");
-  const big = briefingBlocks({ id: "x", title: "T".repeat(300), startedAt: null, durationMs: 1, platform: "zoom", overview: "<script>&", agenda: null, talk: [], actions: Array.from({ length: 40 }, (_, i) => ({ text: `item ${i} ${"x".repeat(200)}`, owner: null, due: null, verified: true })) });
+  const big = briefingBlocks({ id: "x", ownerId: "x", emails: [], title: "T".repeat(300), startedAt: null, durationMs: 1, platform: "zoom", overview: "<script>&", agenda: null, talk: [], actions: Array.from({ length: 40 }, (_, i) => ({ text: `item ${i} ${"x".repeat(200)}`, owner: null, due: null, verified: true })) });
   assert.ok(big.blocks.every((b) => !("text" in b) || (b.text as { text: string }).text.length <= 3000) && (big.blocks[0] as { text: { text: string } }).text.text.length <= 150 && JSON.stringify(big).includes("&lt;script&gt;&amp;") && JSON.stringify(big).includes("25 more"), "Slack limits + escaping");
   console.log("✓ Slack briefing: sent once when notes are ready (title, talk-time bars, action items with owners, deep link); non-Slack hosts refused; 150/3000-char limits and escaping held");
   console.log(`✓ sweeper: stale call with lines → ended + notes, silent call → abandoned, live call untouched; dead worker → requeued + drained, out of retries → meeting failed; idempotent (${report.ms}ms)`);
+
+  // Integrations: Notion page + HubSpot note payloads, delivered with the owner's own tokens, every attempt audited.
+  await db.insert(s.meetingParticipants).values({ meetingId: talked.id, name: "Dana (Acme)", speakerIdx: 1, color: "#888", email: "Dana@Acme.example" });
+  await saveKey(db, maya!.id, "notion", JSON.stringify({ token: "ntn_test", databaseId: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d" }));
+  await saveKey(db, maya!.id, "hubspot", "pat-test");
+  const calls: { url: string; method: string; body: unknown; auth: string | null }[] = [];
+  const stub = (async (url: string, init?: RequestInit) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null, auth: new Headers(init?.headers).get("authorization") });
+    if (url.endsWith("/databases/1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d")) return Response.json({ properties: { Meeting: { type: "title" }, Date: { type: "date" } } });
+    if (url.endsWith("/v1/pages")) return Response.json({ id: "page-1", url: "https://notion.so/page-1" });
+    if (url.endsWith("/contacts/search")) return Response.json({ results: [{ id: "101" }] });
+    if (url.endsWith("/objects/notes")) return Response.json({ id: "note-1" });
+    return new Response("ok");
+  }) as typeof fetch;
+  const delivered = await deliverMeeting(db, talked.id, stub);
+  assert.ok(delivered.notion?.ok && delivered.hubspot?.ok, JSON.stringify(delivered));
+  const page = calls.find((c) => c.url.endsWith("/v1/pages"))!;
+  const pb = page.body as ReturnType<typeof notionPage>;
+  assert.ok(page.auth === "Bearer ntn_test" && pb.properties.Meeting && pb.children.some((b) => b.type === "to_do"), "title goes into the database's own title property; action items as to-dos");
+  const search = calls.find((c) => c.url.endsWith("/contacts/search"))!.body as { filterGroups: { filters: { values: string[] }[] }[] };
+  assert.deepEqual(search.filterGroups[0]!.filters[0]!.values, ["dana@acme.example"], "attendee emails (not the owner) matched, lower-cased");
+  const note = calls.find((c) => c.url.endsWith("/objects/notes"))!.body as { associations: { to: { id: string }; types: { associationTypeId: number }[] }[]; properties: { hs_note_body: string } };
+  assert.ok(note.associations[0]!.to.id === "101" && note.associations[0]!.types[0]!.associationTypeId === 202 && note.properties.hs_note_body.includes("release notes"));
+  const trail = await db.query.auditEvents.findMany({ where: eq(s.auditEvents.userId, maya!.id) });
+  assert.ok(["delivered.notion", "delivered.hubspot"].every((x) => trail.some((t) => t.action === x)), trail.map((t) => t.action).join());
+  const b = (await loadBriefing(db, talked.id))!;
+  const huge = notionPage({ ...b, overview: "x".repeat(5_000), actions: Array.from({ length: 200 }, (_, i) => ({ text: `task ${i}`, owner: null, due: null, verified: true })) }, "db", "Name");
+  assert.ok(huge.children.length <= 100 && huge.children.every((c) => JSON.stringify(c).length < 2_300), "Notion 100-block and 2,000-char limits held");
+  assert.ok(hubspotNoteHtml({ ...b, title: "<script>alert(1)</script>" }).includes("&lt;script&gt;"), "HubSpot note escapes HTML");
+  // Retention: finished meetings older than the owner's window are removed; recent ones stay.
+  await db.update(s.users).set({ retentionDays: 30 }).where(eq(s.users.id, maya!.id));
+  const [stale] = await db.insert(s.meetings).values({ ownerId: maya!.id, title: "Old sync", platform: "zoom", status: "ready", startedAt: ago(60 * 24 * 40) }).returning();
+  const kept = await sweep(db);
+  assert.ok(kept.retiredMeetings === 1 && !(await db.query.meetings.findFirst({ where: eq(s.meetings.id, stale!.id) })) && !!(await db.query.meetings.findFirst({ where: eq(s.meetings.id, talked.id) })));
+  await db.update(s.users).set({ retentionDays: null }).where(eq(s.users.id, maya!.id));
+  console.log("✓ integrations: Notion page (own title property, to-dos, limits) + HubSpot note on matched contacts (assoc 202, escaped) with the owner's tokens, audited; retention removes only meetings past the window");
 
   // Accounts: signed sessions, Google upsert, Try-now upgrade/merge, guest expiry.
   const token = signSession(maya!.id);

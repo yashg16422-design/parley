@@ -6,7 +6,7 @@ import { processMeeting, processWindows } from "./ai/pipeline";
 import type { Database } from "./db";
 import * as s from "./db/schema";
 import { notifyMeeting } from "./live-bus";
-import { sendMeetingBriefing } from "./notify/slack";
+import { deliverMeeting } from "./notify/integrations";
 
 const rows = <T>(r: unknown) => (r as { rows: T[] }).rows;
 
@@ -50,8 +50,8 @@ export async function drainMeeting(db: Database, meetingId: string, llmOverride?
       .where(inArray(s.processingJobs.id, ids));
     if (final) {
       notifyMeeting(meetingId);
-      // Notes are ready: brief the team (no-op without SLACK_WEBHOOK_URL; never throws).
-      await sendMeetingBriefing(db, meetingId);
+      // Notes are ready: brief Slack and push to the owner's Notion / HubSpot (each optional; never throws).
+      await deliverMeeting(db, meetingId);
     }
     return { ran: ids.length, simulated: !llm };
   } catch (e) {

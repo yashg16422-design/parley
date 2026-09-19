@@ -6,7 +6,7 @@ import { currentUserId, findUser } from "@/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const body = z.object({ name: z.string().trim().min(1).max(60), scopes: z.array(z.enum(["ingest", "calendar"])).min(1) });
+const body = z.object({ name: z.string().trim().min(1).max(60), scopes: z.array(z.enum(["ingest", "calendar", "read"])).min(1) });
 
 /** Mint a personal access token (shown once). Browser session only: a token can't mint more tokens. */
 export async function POST(req: Request) {

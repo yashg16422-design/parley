@@ -174,6 +174,41 @@ async function openCore(mayasMeeting: string) {
   assert.equal(new URL(cb.headers.get("location")!).search, "?auth=expired");
   console.log(`✓ auth: unsigned/forged session cookies → 401; Google start → ${process.env.GOOGLE_CLIENT_ID ? "PKCE (S256) redirect, basic scopes, state cookie" : "'not configured' notice"}; mismatched state → refused`);
 
+  // Public API + MCP with a read-scoped token; an ingest-only token can't read.
+  const readTok = ((await (await mint(["read"])).json()) as { token: string }).token;
+  const ingestTok = ((await (await mint(["ingest"])).json()) as { token: string }).token;
+  const api = (path: string, tok: string | null = readTok, init: RequestInit = {}) => fetch(`${BASE}${path}`, { ...init, headers: { "content-type": "application/json", ...(tok ? { authorization: `Bearer ${tok}` } : {}), ...(init.headers ?? {}) } });
+  assert.deepEqual([(await api("/api/v1/meetings", null)).status, (await api("/api/v1/meetings", ingestTok)).status], [401, 401]);
+  const list = (await (await api("/api/v1/meetings?limit=5")).json()) as { meetings: { id: string; url: string }[] };
+  const hero = (await (await api(`/api/v1/meetings/${HERO}?transcript=1`)).json()) as { summary: { sections: unknown[] }; transcript: unknown[]; actionItems: unknown[] };
+  const items = (await (await api("/api/v1/action-items?status=open")).json()) as { actionItems: { status: string }[] };
+  const found = (await (await api("/api/v1/search?q=single%20sign-on")).json()) as { moments: { url: string }[] };
+  const asked = (await (await api("/api/v1/ask", readTok, { method: "POST", body: JSON.stringify({ question: "What did customers say about SSO?" }) })).json()) as { citations: unknown[] };
+  assert.ok(list.meetings.length === 5 && hero.summary.sections.length > 0 && hero.transcript.length > 500 && items.actionItems.every((i) => i.status === "open") && found.moments.length > 5 && asked.citations.length > 0);
+  assert.equal((await api(`/api/v1/meetings/${stableId("meeting:nope")}`)).status, 404);
+  const mcp = (body: object, tok: string | null = readTok) => api("/api/mcp", tok, { method: "POST", headers: { accept: "application/json, text/event-stream" }, body: JSON.stringify(body) });
+  const noAuth = await mcp({ jsonrpc: "2.0", id: 1, method: "initialize" }, null);
+  assert.ok(noAuth.status === 401 && /Bearer/.test(noAuth.headers.get("www-authenticate") ?? ""));
+  const init = (await (await mcp({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "verify", version: "1" } } })).json()) as { result: { protocolVersion: string; capabilities: { tools: object } } };
+  assert.equal(init.result.protocolVersion, "2025-06-18");
+  assert.equal((await mcp({ jsonrpc: "2.0", method: "notifications/initialized" })).status, 202);
+  const tools = (await (await mcp({ jsonrpc: "2.0", id: 2, method: "tools/list" })).json()) as { result: { tools: { name: string }[] } };
+  assert.deepEqual(tools.result.tools.map((t) => t.name).sort(), ["ask_parley", "get_meeting", "list_action_items", "list_meetings", "search_meetings"]);
+  const call = async (name: string, args: object) => ((await (await mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: args } })).json()) as { result: { isError?: boolean; content: { text: string }[] } }).result;
+  const hit = await call("search_meetings", { query: "SAML", limit: 3 });
+  const got = await call("get_meeting", { meeting_id: HERO });
+  const bad = await call("get_meeting", { meeting_id: "nope" });
+  assert.ok(!hit.isError && JSON.parse(hit.content[0]!.text).moments.length === 3 && JSON.parse(got.content[0]!.text).title && bad.isError);
+  const unknown = (await (await mcp({ jsonrpc: "2.0", id: 4, method: "resources/list" })).json()) as { error: { code: number } };
+  assert.equal(unknown.error.code, -32601);
+  assert.equal((await fetch(`${BASE}/api/mcp`, { headers: { authorization: `Bearer ${readTok}` } })).status, 405);
+  console.log(`✓ public API: meetings/meeting+transcript/action items/search/ask with a read token (ingest-only → 401); MCP: initialize (version negotiated), 5 read-only tools, tool errors in-band, unknown method -32601, 401 + WWW-Authenticate`);
+  // Download my data.
+  const exp = await fetch(`${BASE}/api/me/export`, { headers: { cookie: `parley_uid=${sess(MAYA)}` } });
+  const dump = await exp.text();
+  assert.ok(exp.status === 200 && /attachment; filename="parley-export-/.test(exp.headers.get("content-disposition") ?? "") && JSON.parse(dump).meetings.length > 10 && !dump.includes("ciphertext"));
+  console.log(`✓ export: ${Math.round(dump.length / 1024)} KB JSON attachment with meetings, scratchpads and activity; no secret values`);
+
   // Deepgram token rate limit (20 per user per 10 min): burst until refused.
   const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${sess(RAJ)}` } });
   let allowed = 0, refused: Response | null = null;
