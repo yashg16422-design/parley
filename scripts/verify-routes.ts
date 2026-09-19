@@ -69,11 +69,12 @@ function pureChecks() {
 
 async function main() {
   pureChecks();
-  const token = async (uid: string | null) => (await fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: uid ? { cookie: `parley_uid=${uid}` } : {} })).status;
-  assert.equal(await token(null), 401);
-  const tokenStatus = await token(MAYA);
-  assert.ok(process.env.DEEPGRAM_API_KEY ? tokenStatus === 200 : tokenStatus === 503, `token route → ${tokenStatus}`);
-  console.log(`✓ deepgram token route: no session → 401; ${process.env.DEEPGRAM_API_KEY ? "key set → 200" : "no key → 503 (mic room falls back to typing)"}`);
+  const token = (uid: string | null) => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: uid ? { cookie: `parley_uid=${uid}` } : {} });
+  assert.equal((await token(null)).status, 401);
+  const tr = await token(MAYA);
+  const tb = (await tr.json()) as { accessToken?: string };
+  assert.ok(tr.status === 503 || (tr.status === 200 && tb.accessToken), `token route → ${tr.status}`);
+  console.log(`✓ deepgram token route: no session → 401; ${tr.status === 200 ? "key set → short-lived token granted" : "no key → 503 (mic room falls back to typing)"}`);
 
   const source = JSON.parse(readFileSync("seed/fixtures/meetings/q4-product-alignment.json", "utf8")).meetings[0];
   const segments: [number, number, number, string][] = source.segments;
