@@ -1,6 +1,7 @@
 import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves, Settings, Sparkles } from "lucide-react";
 import { leaveWorkspace } from "@app/actions/workspace";
 import { CommandBar } from "@/components/command-bar";
+import { GuestNotice, ModeBadge } from "@/components/mode-badge";
 import { NavLink } from "@/components/nav-link";
 import { SubmitButton } from "@/components/submit-button";
 import { PersonAvatar } from "@/components/person";
@@ -25,15 +26,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/search"><Search />Search</NavLink>
           <NavLink href="/settings"><Settings />Settings</NavLink>
         </nav>
-        <div className="mt-auto flex items-center gap-2 rounded-lg border bg-background p-2">
-          <PersonAvatar name={me.name} color="#0F766E" className="size-8" />
+        <div className="mt-auto space-y-2">
+        <GuestNotice me={me} compact />
+        <div className="flex items-center gap-2 rounded-lg border bg-background p-2">
+          {me.avatarUrl ? <img src={me.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-8 rounded-full" /> : <PersonAvatar name={me.name} color="#0F766E" className="size-8" />}
           <div className="min-w-0 flex-1 text-xs">
-            <div className="truncate font-medium">{me.name}</div>
-            <div className="truncate text-muted-foreground">{me.title}</div>
+            <div className="flex items-center gap-1.5"><span className="truncate font-medium">{me.name}</span><ModeBadge me={me} /></div>
+            <div className="truncate text-muted-foreground">{me.kind === "account" ? me.email : me.title}</div>
           </div>
           <form action={leaveWorkspace}>
-            <SubmitButton variant="ghost" size="icon" title="Switch workspace" className="size-7 text-muted-foreground"><LogOut className="size-4" /></SubmitButton>
+            <SubmitButton variant="ghost" size="icon" title={me.kind === "account" ? "Sign out" : "Leave this workspace"} className="size-7 text-muted-foreground"><LogOut className="size-4" /></SubmitButton>
           </form>
+        </div>
         </div>
       </aside>
       <main id="main" className="min-w-0 flex-1">

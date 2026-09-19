@@ -19,13 +19,15 @@ export async function enterDemo() {
   redirect("/home");
 }
 
-/** A brand-new, empty workspace user for testing from scratch. */
+/** "Try now": a temporary workspace, no signup. The sweeper deletes it after 24 hours unless its owner signs up. */
+const GUEST_TTL_MS = 24 * 3_600_000;
+
 export async function startFresh(form: FormData) {
   const name = String(form.get("name") ?? "").trim().slice(0, 60) || "You";
   // Each fresh workspace gets its own rate-limit buckets, so cap how fast one address can mint them.
   if (!(await takeToken(getDb(), `ws:ip:${clientIp(await headers())}`, 10, 3_600_000)).ok) redirect("/?limited=1");
   const id = crypto.randomUUID();
-  await getDb().insert(s.users).values({ id, name, email: `guest-${id.slice(0, 8)}@guest.parley.example`, title: "Guest workspace" });
+  await getDb().insert(s.users).values({ id, name, email: `guest-${id.slice(0, 8)}@guest.parley.example`, title: "Guest workspace", kind: "guest", expiresAt: new Date(Date.now() + GUEST_TTL_MS) });
   await setSession(id);
   // Only known in-app destinations, never an arbitrary URL from the form.
   redirect(form.get("next") === "/live/mic?join=1" ? "/live/mic?join=1" : "/home");

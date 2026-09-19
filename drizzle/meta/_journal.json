@@ -64,6 +64,13 @@
       "when": 1789808598837,
       "tag": "0008_scratchpad",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789810525163,
+      "tag": "0009_accounts",
+      "breakpoints": true
     }
   ]
 }

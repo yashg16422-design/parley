@@ -12,6 +12,7 @@ const body = z.object({ name: z.string().trim().min(1).max(60), scopes: z.array(
 export async function POST(req: Request) {
   const me = await findUser(await currentUserId());
   if (!me) return jsonError(401, "no workspace session");
+  if (me.kind === "guest") return jsonError(403, "sign up to create access tokens");
   const b = body.safeParse(await req.json().catch(() => null));
   if (!b.success) return badRequest(b.error);
   return Response.json(await createToken(me.id, b.data.name, b.data.scopes), { status: 201, headers: { "cache-control": "no-store" } });

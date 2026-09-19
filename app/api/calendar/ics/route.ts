@@ -18,6 +18,7 @@ const body = z.object({ url: z.string().trim().min(1).max(2000).optional() });
 export async function POST(req: Request) {
   const me = await requestUser(req, "calendar");
   if (!me) return jsonError(401, "no workspace session or valid calendar token");
+  if (me.kind === "guest") return jsonError(403, "sign up to connect a calendar");
   if (!vaultReady()) return jsonError(503, "server has no PARLEY_SECRET_KEY, so it can't store feed addresses");
   const b = body.safeParse(await req.json().catch(() => ({})));
   if (!b.success) return badRequest(b.error);

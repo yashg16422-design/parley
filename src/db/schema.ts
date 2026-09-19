@@ -82,6 +82,9 @@ export const jobStatus = pgEnum("job_status", ["queued", "running", "succeeded",
 // Users & calendar (Google connection is simulated - no OAuth tokens stored)
 // ---------------------------------------------------------------------------
 
+/** demo: the shared sample workspace · guest: "Try now", deleted at expires_at · account: signed in with Google */
+export const userKind = pgEnum("user_kind", ["demo", "guest", "account"]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
@@ -89,8 +92,13 @@ export const users = pgTable("users", {
   title: text("title"),
   avatarUrl: text("avatar_url"),
   timezone: text("timezone").notNull().default("America/New_York"),
+  kind: userKind("kind").notNull().default("demo"),
+  /** Google's stable account id ("sub"), set for kind = account. */
+  googleSub: text("google_sub").unique(),
+  /** Guests only: when the sweeper deletes the workspace and everything in it. */
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: createdAt(),
-});
+}, (t) => [index("users_guest_expiry_idx").on(t.expiresAt).where(sql`${t.expiresAt} IS NOT NULL`)]);
 
 export const calendarConnections = pgTable(
   "calendar_connections",

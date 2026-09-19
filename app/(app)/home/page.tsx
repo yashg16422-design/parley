@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarPlus, CheckCircle2, Mic, Radio, Sparkles } from "lucide-react";
 import { CommandBar } from "@/components/command-bar";
+import { GuestNotice } from "@/components/mode-badge";
 import { PLATFORM } from "@/components/event-details";
 import { JoinByLink } from "@/components/join-by-link";
 import { JoinRecord } from "@/components/join-record";
@@ -44,6 +45,7 @@ export default async function Home() {
       </header>
 
       <div className="space-y-2">
+        <GuestNotice me={me} />
         <CommandBar variant="hero" />
         <JoinByLink signedIn compact />
       </div>

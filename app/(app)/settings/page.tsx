@@ -3,6 +3,7 @@ import { disconnectFeed, removeProviderKey, revoke } from "@app/actions/settings
 import { setTheme } from "@app/actions/workspace";
 import { cookies } from "next/headers";
 import { FeedForm, KeyForm, TokenForm } from "@/components/settings-forms";
+import { GuestNotice } from "@/components/mode-badge";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { SubmitButton } from "@/components/submit-button";
@@ -30,11 +31,13 @@ export default async function Settings() {
     db.query.apiTokens.findMany({ where: and(eq(s.apiTokens.userId, me.id), isNull(s.apiTokens.revokedAt)), orderBy: desc(s.apiTokens.createdAt) }),
   ]);
   const vault = vaultReady();
+  const canSave = vault && me.kind !== "guest";
   const theme = (await cookies()).get("parley_theme")?.value === "light" ? "light" : "dark";
   return (
     <>
       <PageHeader title="Settings" subtitle="Your own provider keys, calendar feed and API access." />
       <div className="max-w-3xl space-y-6 p-6">
+        <GuestNotice me={me} />
         {!vault && <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">This server has no <code>PARLEY_SECRET_KEY</code>, so keys and calendar feeds can&apos;t be stored yet.</p>}
 
         <Card className="flex-row flex-wrap items-center gap-3 p-5">
@@ -55,7 +58,7 @@ export default async function Settings() {
                   {mine && <form action={removeProviderKey} className="ml-auto"><input type="hidden" name="kind" value={p.kind} /><SubmitButton size="sm" variant="ghost">Remove</SubmitButton></form>}
                 </div>
                 <p className="text-xs text-muted-foreground">{p.hint}</p>
-                {vault && <KeyForm kind={p.kind} placeholder={p.placeholder} />}
+                {canSave && <KeyForm kind={p.kind} placeholder={p.placeholder} />}
               </div>
             );
           })}
@@ -69,12 +72,12 @@ export default async function Settings() {
           </div>
           <p className="text-sm text-muted-foreground">Google Calendar → Settings → your calendar → <b>Secret address in iCal format</b>. Read-only; video calls from the last week and next 30 days appear on your calendar. Treat the address like a password; reset it in Google to revoke access.</p>
           {feed?.lastSyncError && <p className="text-sm text-destructive">{feed.lastSyncError}</p>}
-          {vault && <FeedForm connected={!!feed} />}
+          {canSave && <FeedForm connected={!!feed} />}
         </Card>
 
         <Card className="gap-3 p-5">
           <div><h2 className="font-semibold">Access tokens</h2><p className="text-sm text-muted-foreground">For the capture extension and your own scripts: <code>Authorization: Bearer parley_pat_…</code> on <code>/api/ingest</code>, <code>/api/deepgram/token</code> (ingest) and <code>/api/calendar/ics</code> (calendar).</p></div>
-          <TokenForm />
+          {me.kind !== "guest" && <TokenForm />}
           {tokens.map((t) => (
             <div key={t.id} className="flex items-center gap-2 border-t pt-2 text-sm">
               <code className="text-xs">{t.prefix}…</code><span className="font-medium">{t.name}</span>

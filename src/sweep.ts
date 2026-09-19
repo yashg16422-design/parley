@@ -65,5 +65,7 @@ export async function sweep(db: Database, { staleMs = 30 * 60_000, budgetMs = 45
     if (Date.now() - t0 > budgetMs) break;
     await syncIcs(db, f.userId).then(() => syncedFeeds++, () => {});
   }
-  return { syncedFeeds, reclaimedJobs: reclaimed.length, endedStaleCalls: ended, abandonedCalls: abandoned, failedMeetings: failed.length, drainedMeetings: drained, pendingMeetings: due.length - drained, ms: Date.now() - t0 };
+  // 6. "Try now" workspaces past their 24 hours: the user row cascades to everything they recorded.
+  const expired = rows<{ id: string }>(await db.execute(sql`DELETE FROM users WHERE kind = 'guest' AND expires_at < now() RETURNING id`));
+  return { expiredGuests: expired.length, syncedFeeds, reclaimedJobs: reclaimed.length, endedStaleCalls: ended, abandonedCalls: abandoned, failedMeetings: failed.length, drainedMeetings: drained, pendingMeetings: due.length - drained, ms: Date.now() - t0 };
 }

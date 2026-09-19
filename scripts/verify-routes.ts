@@ -12,6 +12,10 @@ import { createIngestClient } from "../src/capture/dual-stream";
 import { wordsToLines } from "../src/lib/deepgram";
 import { checkClipRange, muxClipAssetRequest, muxClipPlaybackUrl } from "../src/media";
 import { stableId } from "../src/lib/stable-id";
+import { signSession } from "../src/session-token";
+
+/** Session cookies are HMAC-signed; the test signs with the same PARLEY_SECRET_KEY as the server under test. */
+const sess = (uid: string) => signSession(uid);
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const HERO = stableId("meeting:q4-product-alignment");
@@ -22,12 +26,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const MAYA = stableId("user:maya@driftwood.example");
 const post = async (body: object, uid: string | null = MAYA) => {
-  const headers: Record<string, string> = { "content-type": "application/json", ...(uid ? { cookie: `parley_uid=${uid}` } : {}) };
+  const headers: Record<string, string> = { "content-type": "application/json", ...(uid ? { cookie: `parley_uid=${sess(uid)}` } : {}) };
   const r = await fetch(`${BASE}/api/ingest`, { method: "POST", headers, body: JSON.stringify(body) });
   return { status: r.status, body: (await r.json()) as Record<string, unknown> };
 };
 const summary = async (meetingId: string, templateId?: string) => {
-  const r = await fetch(`${BASE}/api/summary?meetingId=${meetingId}${templateId ? `&templateId=${templateId}` : ""}`, { headers: { cookie: `parley_uid=${MAYA}` } });
+  const r = await fetch(`${BASE}/api/summary?meetingId=${meetingId}${templateId ? `&templateId=${templateId}` : ""}`, { headers: { cookie: `parley_uid=${sess(MAYA)}` } });
   if (!r.headers.get("content-type")?.includes("ndjson")) return { status: r.status, events: [] as Record<string, unknown>[] };
   return { status: r.status, events: (await r.text()).trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>) };
 };
@@ -36,7 +40,7 @@ const summary = async (meetingId: string, templateId?: string) => {
 function watch(meetingId: string, uid: string | null = MAYA) {
   const events: { event: string; id?: string; data: unknown; at: number }[] = [];
   const done = (async () => {
-    const r = await fetch(`${BASE}/api/streams/meetings?meetingId=${meetingId}`, { headers: uid ? { cookie: `parley_uid=${uid}` } : {} });
+    const r = await fetch(`${BASE}/api/streams/meetings?meetingId=${meetingId}`, { headers: uid ? { cookie: `parley_uid=${sess(uid)}` } : {} });
     if (!r.ok || !r.body) return r.status;
     let buf = "";
     for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
@@ -77,11 +81,11 @@ async function openCore(mayasMeeting: string) {
   assert.equal((await post(line, RAJ)).status, 404, "another user can't write into Maya's call");
   assert.equal((await post({ op: "end", meetingId: id, clockMs: 1000 }, RAJ)).status, 404, "…or end it");
   assert.equal((await post(line, null)).status, 401);
-  const peek = async (uid: string | null, path: string) => (await fetch(`${BASE}${path}`, { headers: uid ? { cookie: `parley_uid=${uid}` } : {} })).status;
+  const peek = async (uid: string | null, path: string) => (await fetch(`${BASE}${path}`, { headers: uid ? { cookie: `parley_uid=${sess(uid)}` } : {} })).status;
   assert.deepEqual([await peek(RAJ, `/api/ingest?meetingId=${id}`), await peek(null, `/api/summary?meetingId=${mayasMeeting}`), await peek(RAJ, `/api/summary?meetingId=${mayasMeeting}`)], [404, 401, 404]);
   console.log("✓ hardening: append/end/status/summary are owner- or attendee-only (other user → 404, no session → 401)");
 
-  const mint = async (scopes: string[], auth: Record<string, string> = { cookie: `parley_uid=${MAYA}` }) =>
+  const mint = async (scopes: string[], auth: Record<string, string> = { cookie: `parley_uid=${sess(MAYA)}` }) =>
     fetch(`${BASE}/api/tokens`, { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ name: "verify", scopes }) });
   const { id: tokenId, token } = (await (await mint(["ingest"])).json()) as { id: string; token: string };
   assert.match(token, /^parley_pat_[\w-]{32}$/);
@@ -102,12 +106,12 @@ async function openCore(mayasMeeting: string) {
   const cal = (await (await mint(["calendar"])).json()) as { token: string };
   const asCal = await fetch(`${BASE}/api/ingest`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${cal.token}` }, body: JSON.stringify({ op: "start_mic", title: "x", participants: ["x"] }) });
   assert.equal(asCal.status, 401, "calendar-scoped token can't ingest");
-  await fetch(`${BASE}/api/tokens?id=${tokenId}`, { method: "DELETE", headers: { cookie: `parley_uid=${MAYA}` } });
+  await fetch(`${BASE}/api/tokens?id=${tokenId}`, { method: "DELETE", headers: { cookie: `parley_uid=${sess(MAYA)}` } });
   assert.equal((await createIngestClient({ baseUrl: BASE, token }).start("x", ["x"]).catch((e: Error) => e.message)), "no workspace session or valid ingest token", "revoked token rejected");
   console.log("✓ access tokens: extension client ingests with Bearer (3 lines, 2 batches), scopes enforced, revocation immediate, tokens can't mint tokens");
 
   const ics = (body: object, auth: Record<string, string>) => fetch(`${BASE}/api/calendar/ics`, { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify(body) });
-  const asCookie = { cookie: `parley_uid=${MAYA}` };
+  const asCookie = { cookie: `parley_uid=${sess(MAYA)}` };
   assert.equal((await ics({ url: "http://169.254.169.254/latest/meta-data" }, asCookie)).status, 400, "non-allowlisted feed host");
   assert.equal((await ics({}, asCookie)).status, 404, "no feed connected yet");
   assert.equal((await ics({}, {})).status, 401);
@@ -118,10 +122,10 @@ async function openCore(mayasMeeting: string) {
   // Call recordings: owner uploads ordered chunks (idempotent); visible users stream with Range; outsiders get 404.
   const rec = (await post({ op: "start_mic", title: "Recorded call", participants: ["Maya Chen"] })).body.meetingId as string;
   const put = (idx: number, body: string, uid = MAYA, type = "audio/webm;codecs=opus") =>
-    fetch(`${BASE}/api/recordings/${rec}?idx=${idx}&startMs=120`, { method: "POST", headers: { "content-type": type, cookie: `parley_uid=${uid}` }, body });
+    fetch(`${BASE}/api/recordings/${rec}?idx=${idx}&startMs=120`, { method: "POST", headers: { "content-type": type, cookie: `parley_uid=${sess(uid)}` }, body });
   assert.deepEqual([(await put(0, "AAAA")).status, (await put(1, "BBBB")).status, (await put(0, "XXXX")).status], [200, 200, 200]);
   assert.deepEqual([(await put(2, "CC", RAJ)).status, (await put(2, "CC", MAYA, "text/html")).status], [404, 400]);
-  const get = (uid: string | null, range?: string) => fetch(`${BASE}/api/recordings/${rec}`, { headers: { ...(uid ? { cookie: `parley_uid=${uid}` } : {}), ...(range ? { range } : {}) } });
+  const get = (uid: string | null, range?: string) => fetch(`${BASE}/api/recordings/${rec}`, { headers: { ...(uid ? { cookie: `parley_uid=${sess(uid)}` } : {}), ...(range ? { range } : {}) } });
   const full = await get(MAYA);
   assert.deepEqual([full.status, await full.text(), full.headers.get("content-type")], [200, "AAAABBBB", "audio/webm"], "chunks in order; the retried chunk 0 wasn't duplicated");
   const part = await get(MAYA, "bytes=2-5");
@@ -136,19 +140,19 @@ async function openCore(mayasMeeting: string) {
   console.log("✓ discard: owner deletes the live call and its recording; others 404; second discard 404");
 
   // Ask Parley and live notes over HTTP (no model configured on the test server → cited quotes / rule-based).
-  const askIt = (question: string, uid: string | null = MAYA) => fetch(`${BASE}/api/ai/ask`, { method: "POST", headers: { "content-type": "application/json", ...(uid ? { cookie: `parley_uid=${uid}` } : {}) }, body: JSON.stringify({ question }) });
+  const askIt = (question: string, uid: string | null = MAYA) => fetch(`${BASE}/api/ai/ask`, { method: "POST", headers: { "content-type": "application/json", ...(uid ? { cookie: `parley_uid=${sess(uid)}` } : {}) }, body: JSON.stringify({ question }) });
   assert.equal((await askIt("What about SSO?", null)).status, 401);
   assert.equal((await askIt("x")).status, 400);
   const answer = (await (await askIt("What did customers say about single sign-on?")).json()) as { source: string; citations: { href: string }[] };
   assert.ok(answer.source === "quotes" && answer.citations.length > 0 && answer.citations.every((c) => /^\/meetings\/[0-9a-f-]{36}\?t=\d+#line-\d+$/.test(c.href)), JSON.stringify(answer).slice(0, 300));
-  const notes = await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${MAYA}` } });
+  const notes = await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${sess(MAYA)}` } });
   const insight = (await notes.json()) as { source: string; actions: { text: string }[]; lines: number };
   assert.ok(notes.status === 200 && insight.lines === 4 && insight.actions.some((x) => /send the update to leadership/.test(x.text)), JSON.stringify(insight).slice(0, 300));
-  assert.equal((await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${RAJ}` } })).status, 404);
+  assert.equal((await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${sess(RAJ)}` } })).status, 404);
   console.log(`✓ Ask Parley API: ${answer.citations.length} cited quotes with ?t= links (no model on server), 401/400 guards; live notes API: ${insight.actions.length} actions, owner-scoped`);
 
   // Scratchpad: private per user, autosave upserts.
-  const pad = (uid: string, method = "GET", body?: string) => fetch(`${BASE}/api/meetings/${mayasMeeting}/scratchpad`, { method, headers: { "content-type": "application/json", cookie: `parley_uid=${uid}` }, ...(body !== undefined ? { body: JSON.stringify({ body }) } : {}) });
+  const pad = (uid: string, method = "GET", body?: string) => fetch(`${BASE}/api/meetings/${mayasMeeting}/scratchpad`, { method, headers: { "content-type": "application/json", cookie: `parley_uid=${sess(uid)}` }, ...(body !== undefined ? { body: JSON.stringify({ body }) } : {}) });
   assert.equal((await (await pad(MAYA)).json()).body, "");
   assert.equal((await pad(MAYA, "PUT", "[0:02] ask Raj about p95")).status, 200);
   assert.equal((await pad(MAYA, "PUT", "[0:02] ask Raj about p95\nfollow up Friday")).status, 200);
@@ -156,8 +160,22 @@ async function openCore(mayasMeeting: string) {
   assert.deepEqual([(await pad(RAJ)).status, (await pad(RAJ, "PUT", "hijack")).status, (await pad(MAYA, "PUT", "x".repeat(20_001))).status], [404, 404, 400]);
   console.log("✓ scratchpad: private autosave (upsert, 20k cap), invisible to other users");
 
+  // Sessions are signed: a bare or forged user id is not a login.
+  const as = (cookie: string) => fetch(`${BASE}/api/ingest?meetingId=${mayasMeeting}`, { headers: { cookie } });
+  assert.deepEqual([(await as(`parley_uid=${MAYA}`)).status, (await as(`parley_uid=${MAYA}.${"A".repeat(43)}`)).status, (await as(`parley_uid=${sess(MAYA)}`)).status], [401, 401, 200]);
+  // Google sign-in: PKCE redirect with state cookie; a callback that doesn't match the state is refused.
+  const start = await fetch(`${BASE}/api/auth/google?next=/settings`, { redirect: "manual" });
+  const loc = new URL(start.headers.get("location") ?? "http://x/");
+  if (process.env.GOOGLE_CLIENT_ID) {
+    assert.equal(loc.origin + loc.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
+    assert.ok(loc.searchParams.get("code_challenge_method") === "S256" && loc.searchParams.get("scope") === "openid email profile" && loc.searchParams.get("state") && /parley_oauth=/.test(start.headers.get("set-cookie") ?? ""));
+  } else assert.equal(loc.search, "?auth=unconfigured");
+  const cb = await fetch(`${BASE}/api/auth/google/callback?code=x&state=forged`, { redirect: "manual" });
+  assert.equal(new URL(cb.headers.get("location")!).search, "?auth=expired");
+  console.log(`✓ auth: unsigned/forged session cookies → 401; Google start → ${process.env.GOOGLE_CLIENT_ID ? "PKCE (S256) redirect, basic scopes, state cookie" : "'not configured' notice"}; mismatched state → refused`);
+
   // Deepgram token rate limit (20 per user per 10 min): burst until refused.
-  const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${RAJ}` } });
+  const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${sess(RAJ)}` } });
   let allowed = 0, refused: Response | null = null;
   for (let i = 0; i < 25 && !refused; i++) {
     const r = await grant();
@@ -179,7 +197,7 @@ async function openCore(mayasMeeting: string) {
 
 async function main() {
   pureChecks();
-  const token = (uid: string | null) => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: uid ? { cookie: `parley_uid=${uid}` } : {} });
+  const token = (uid: string | null) => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: uid ? { cookie: `parley_uid=${sess(uid)}` } : {} });
   assert.equal((await token(null)).status, 401);
   const tr = await token(MAYA);
   const tb = (await tr.json()) as { accessToken?: string };
@@ -232,7 +250,7 @@ async function main() {
   let state: { status: string; jobs: { kind: string; status: string; lastError: string | null }[] } = { status: "", jobs: [] };
   for (let i = 0; i < 40 && state.status !== "ready"; i++) {
     await sleep(250);
-    state = await (await fetch(`${BASE}/api/ingest?meetingId=${meetingId}`, { headers: { cookie: `parley_uid=${MAYA}` } })).json();
+    state = await (await fetch(`${BASE}/api/ingest?meetingId=${meetingId}`, { headers: { cookie: `parley_uid=${sess(MAYA)}` } })).json();
   }
   assert.equal(state.status, "ready", JSON.stringify(state));
   assert.ok(state.jobs.length === 3 && state.jobs.every((j) => j.status === "succeeded"), JSON.stringify(state.jobs));
@@ -290,7 +308,7 @@ async function main() {
   assert.equal((await post({ op: "append", meetingId: micId, clockMs: 10 * 60_000, speed: 1, fromSeq: seq, lines: [{ speakerIdx: 0, startMs: 1, endMs: 2, text: "x" }] })).status, 429, "1x clock is enforced for mic calls too");
   assert.equal((await post({ op: "end", meetingId: micId, clockMs: Date.now() - m0 })).status, 200);
   let micState = { status: "" };
-  for (let i = 0; i < 40 && micState.status !== "ready"; i++) (await sleep(250)), (micState = await (await fetch(`${BASE}/api/ingest?meetingId=${micId}`, { headers: { cookie: `parley_uid=${MAYA}` } })).json());
+  for (let i = 0; i < 40 && micState.status !== "ready"; i++) (await sleep(250)), (micState = await (await fetch(`${BASE}/api/ingest?meetingId=${micId}`, { headers: { cookie: `parley_uid=${sess(MAYA)}` } })).json());
   assert.equal(micState.status, "ready");
   assert.equal(await watcher.done, 200);
   const streamed = watcher.events.filter((e) => e.event === "lines").flatMap((e) => (e.data as { seq: number; text: string }[]).map((l) => ({ ...l, at: e.at })));

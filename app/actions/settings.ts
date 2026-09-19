@@ -13,9 +13,11 @@ export type FormState = { ok?: string; error?: string; token?: string };
 const kind = z.enum(["deepgram", "huggingface", "anthropic", "openai"]);
 const done = (ok: string, extra: Partial<FormState> = {}): FormState => (revalidatePath("/settings"), { ok, ...extra });
 const NO_VAULT = { error: "This server has no PARLEY_SECRET_KEY, so it can't store secrets." };
+const GUEST = { error: "Sign up with Google to save keys, calendars and tokens. Try-now workspaces are deleted after 24 hours." };
 
 export async function saveProviderKey(_: FormState, f: FormData): Promise<FormState> {
   const me = await currentUser();
+  if (me.kind === "guest") return GUEST;
   if (!vaultReady()) return NO_VAULT;
   const k = kind.parse(f.get("kind"));
   const key = String(f.get("key") ?? "").trim();
@@ -34,6 +36,7 @@ export async function removeProviderKey(f: FormData) {
 
 export async function connectFeed(_: FormState, f: FormData): Promise<FormState> {
   const me = await currentUser();
+  if (me.kind === "guest") return GUEST;
   if (!vaultReady()) return NO_VAULT;
   try {
     const url = String(f.get("url") ?? "");
@@ -53,6 +56,7 @@ export async function disconnectFeed() {
 
 export async function newToken(_: FormState, f: FormData): Promise<FormState> {
   const me = await currentUser();
+  if (me.kind === "guest") return GUEST;
   const scopes = z.array(z.enum(["ingest", "calendar"])).min(1).safeParse(f.getAll("scopes"));
   if (!scopes.success) return { error: "Pick at least one scope." };
   const { token } = await createToken(me.id, String(f.get("name") || "Capture extension").slice(0, 60), scopes.data);

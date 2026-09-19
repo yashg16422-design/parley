@@ -24,8 +24,24 @@ const INTEGRATIONS = [
   ["Hugging Face", "from-yellow-300 to-amber-500"], ["Deepgram", "from-lime-300 to-green-600"], ["iCal", "from-rose-300 to-red-500"],
 ] as const;
 
-export default async function Landing({ searchParams }: { searchParams: Promise<{ limited?: string }> }) {
-  const [me, { limited }] = await Promise.all([currentUserId().then(findUser), searchParams]);
+const AUTH_MESSAGE: Record<string, string> = {
+  unconfigured: "Google sign-in isn't set up on this server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). Try now works without it.",
+  failed: "Google sign-in didn't complete. Please try again.",
+  expired: "That sign-in link expired. Please try again.",
+  cancelled: "Sign-in was cancelled.",
+};
+
+const MODES = [
+  ["Record calls and get AI notes", "✓", "✓", "✓"],
+  ["Ask Parley, live notes, scratchpad, clips", "✓", "✓", "✓"],
+  ["How long your data is kept", "24 hours", "Until you delete it", "Shared sample data"],
+  ["Your own API keys, calendar, access tokens", "—", "✓", "Shared"],
+  ["Sign-in needed", "No", "Google", "No"],
+  ["Same workspace on every device", "—", "✓", "—"],
+] as const;
+
+export default async function Landing({ searchParams }: { searchParams: Promise<{ limited?: string; auth?: string }> }) {
+  const [me, { limited, auth }] = await Promise.all([currentUserId().then(findUser), searchParams]);
   return (
     <div className="dark min-h-dvh overflow-x-clip bg-[oklch(0.12_0.015_260)] text-foreground">
       {/* Sky: slow-drifting stars and two soft light sources */}
@@ -46,10 +62,13 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           <a href="#open" className="hover:text-white">Open core</a>
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          {me ? (
+          {me?.kind === "account" ? (
             <Link href="/home" className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-900 transition-transform hover:-translate-y-px">Continue as {me.name.split(" ")[0]}</Link>
           ) : (
-            <form action={enterDemo}><SubmitButton className="rounded-full bg-cyan-300 px-4 text-slate-900 hover:bg-cyan-200">Open the demo</SubmitButton></form>
+            <>
+              {me && <Link href="/home" className="px-2 text-sm text-white/70 hover:text-white">Back to {me.kind === "guest" ? "your try-now workspace" : "the demo"}</Link>}
+              <a href="/api/auth/google" className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-medium text-slate-900 transition-transform hover:-translate-y-px">Sign in with Google</a>
+            </>
           )}
         </div>
       </header>
@@ -66,15 +85,50 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left backdrop-blur">
             <p className="mb-3 text-sm font-medium text-white">Paste a meeting link to record it</p>
             <JoinByLink signedIn={!!me} />
+            {!me && <p className="mt-2 text-xs text-white/45">Starts a Try-now workspace (no signup, kept 24 hours). Sign in to keep it.</p>}
             {limited && <p className="mt-2 text-sm text-amber-300">Too many new workspaces from this network. Try again in an hour, or open the demo.</p>}
+            {auth && AUTH_MESSAGE[auth] && <p className="mt-2 text-sm text-amber-300">{AUTH_MESSAGE[auth]}</p>}
           </div>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-sm">
-            <form action={enterDemo}><SubmitButton variant="ghost" className="text-white/80 hover:text-white">Enter Reviewer Demo Workspace<ArrowRight /></SubmitButton></form>
-            <span className="text-white/20">·</span>
-            <form action={startFresh} className="flex items-center gap-2">
-              <Input name="name" placeholder="Your name" maxLength={60} className="h-9 w-36 border-white/15 bg-white/5" />
-              <SubmitButton variant="ghost" className="text-white/80 hover:text-white">Start a Live New Meeting<ArrowRight /></SubmitButton>
-            </form>
+        </section>
+
+        {/* Three ways in, side by side, with the differences spelled out */}
+        <section id="start" className="mx-auto max-w-6xl scroll-mt-10 px-6 pb-20">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Try now · no signup</p>
+              <h2 className="mt-2 text-lg font-semibold text-white">Start a Live New Meeting</h2>
+              <p className="mb-5 mt-1.5 text-sm text-white/55">Everything works right away. Your workspace and recordings are deleted after 24 hours unless you sign in.</p>
+              <form action={startFresh} className="mt-auto flex gap-2">
+                <Input name="name" placeholder="Your name" maxLength={60} className="h-10 min-w-0 flex-1 border-white/15 bg-white/5" />
+                <SubmitButton className="h-10 bg-white text-slate-900 hover:bg-white/90">Try now<ArrowRight /></SubmitButton>
+              </form>
+            </div>
+            <div className="relative flex flex-col rounded-2xl border border-cyan-300/40 bg-cyan-300/[0.07] p-6 shadow-[0_20px_60px_-30px_rgb(34_211_238/0.6)]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Full version · free</p>
+              <h2 className="mt-2 text-lg font-semibold text-white">Sign up with Google</h2>
+              <p className="mb-5 mt-1.5 text-sm text-white/55">Your recordings, notes, scratchpads, API keys, calendar and Slack briefings are saved to your account, on every device.</p>
+              <a href="/api/auth/google" className="mt-auto flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 text-sm font-medium text-slate-900 transition-transform hover:-translate-y-px">
+                <span className="flex size-5 items-center justify-center rounded-full bg-white text-[11px] font-bold text-slate-900">G</span>Continue with Google
+              </a>
+            </div>
+            <div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+              <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Demo · sample data</p>
+              <h2 className="mt-2 text-lg font-semibold text-white">Enter Reviewer Demo Workspace</h2>
+              <p className="mb-5 mt-1.5 text-sm text-white/55">Explore Maya Chen&apos;s 20 recorded meetings, an 8-person hour-long call, clips and a busy calendar. Shared by every visitor.</p>
+              <form action={enterDemo} className="mt-auto"><SubmitButton variant="outline" className="h-10 w-full border-white/20 bg-transparent text-white hover:bg-white/10">Open the demo<ArrowRight /></SubmitButton></form>
+            </div>
+          </div>
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="bg-white/[0.04] text-left text-xs text-white/50">
+                <tr><th className="px-4 py-3 font-medium" /><th className="px-4 py-3 font-medium">Try now</th><th className="px-4 py-3 font-medium text-cyan-300">Full version</th><th className="px-4 py-3 font-medium">Demo</th></tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-white/75">
+                {MODES.map(([label, ...cells]) => (
+                  <tr key={label}><td className="px-4 py-2.5 text-white/55">{label}</td>{cells.map((c, i) => <td key={i} className={`px-4 py-2.5 ${i === 1 ? "text-white" : ""}`}>{c}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -156,8 +210,8 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           <h2 className="text-4xl font-semibold tracking-[-0.03em] text-white">Take your next call with Parley.</h2>
           <p className="mt-4 text-white/60">Look around the demo workspace first, or record a real meeting now.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <form action={enterDemo}><SubmitButton className="h-11 rounded-full bg-cyan-300 px-6 text-slate-900 hover:bg-cyan-200">Open the demo<ArrowRight /></SubmitButton></form>
-            <Link href={me ? "/live/mic" : "#join"} className="flex h-11 items-center rounded-full border border-white/15 px-6 text-sm text-white/85 transition-colors hover:border-white/30">{me ? "Record a meeting" : "Paste a link above"}</Link>
+            <a href="/api/auth/google" className="flex h-11 items-center rounded-full bg-cyan-300 px-6 text-sm font-medium text-slate-900 transition-transform hover:-translate-y-px">Sign up with Google</a>
+            <Link href="#start" className="flex h-11 items-center rounded-full border border-white/15 px-6 text-sm text-white/85 transition-colors hover:border-white/30">Try now, no signup</Link>
           </div>
         </section>
       </main>

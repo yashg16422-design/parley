@@ -20,6 +20,8 @@ import { takeToken } from "../src/rate-limit";
 import { sweep } from "../src/sweep";
 import { briefingBlocks, slackWebhook } from "../src/notify/slack";
 import { templates } from "../seed/src/templates";
+import { upsertGoogleUser } from "../src/google-auth";
+import { readSession, signSession } from "../src/session-token";
 import { open, seal } from "../src/vault";
 
 process.env.PARLEY_SECRET_KEY = "test-secret-key-that-is-at-least-32-chars";
@@ -292,6 +294,40 @@ async function main() {
   assert.ok(big.blocks.every((b) => !("text" in b) || (b.text as { text: string }).text.length <= 3000) && (big.blocks[0] as { text: { text: string } }).text.text.length <= 150 && JSON.stringify(big).includes("&lt;script&gt;&amp;") && JSON.stringify(big).includes("25 more"), "Slack limits + escaping");
   console.log("✓ Slack briefing: sent once when notes are ready (title, talk-time bars, action items with owners, deep link); non-Slack hosts refused; 150/3000-char limits and escaping held");
   console.log(`✓ sweeper: stale call with lines → ended + notes, silent call → abandoned, live call untouched; dead worker → requeued + drained, out of retries → meeting failed; idempotent (${report.ms}ms)`);
+
+  // Accounts: signed sessions, Google upsert, Try-now upgrade/merge, guest expiry.
+  const token = signSession(maya!.id);
+  assert.equal(readSession(token), maya!.id);
+  assert.deepEqual([readSession(maya!.id), readSession(token.slice(0, -1) + (token.endsWith("A") ? "B" : "A")), readSession(`${raj!.id}.${token.split(".")[1]}`)], [null, null, null], "bare, tampered and transplanted signatures rejected");
+  const google = (sub: string, email: string) => ({ sub, email, email_verified: true, name: "Yash P", picture: "https://lh3.googleusercontent.com/a/x" });
+  await assert.rejects(upsertGoogleUser(db, { ...google("g-0", "x@gmail.com"), email_verified: false }, null), /verified/);
+  const fresh = await upsertGoogleUser(db, google("g-1", "Yash@Gmail.com"), null);
+  const returning = await upsertGoogleUser(db, google("g-1", "yash@gmail.com"), null);
+  assert.ok(fresh.created && !returning.created && returning.userId === fresh.userId, "same Google account → same user");
+  const acct = await db.query.users.findFirst({ where: eq(s.users.id, fresh.userId) });
+  assert.deepEqual([acct!.kind, acct!.email, acct!.expiresAt], ["account", "yash@gmail.com", null]);
+  // Guest signs up for the first time: the guest row itself becomes the account, recordings intact.
+  const soon = new Date(Date.now() + 3_600_000);
+  const [g1] = await db.insert(s.users).values({ name: "Guest", email: "guest-g1@guest.parley.example", kind: "guest", expiresAt: soon }).returning();
+  const [gm] = await db.insert(s.meetings).values({ ownerId: g1!.id, title: "Guest call", platform: "zoom", status: "ready" }).returning();
+  const up = await upsertGoogleUser(db, google("g-2", "new@gmail.com"), g1!.id);
+  const g1After = await db.query.users.findFirst({ where: eq(s.users.id, g1!.id) });
+  assert.ok(up.userId === g1!.id && up.keptGuestData && g1After!.kind === "account" && g1After!.expiresAt === null);
+  // Guest signs in to an existing account: meetings + scratchpad move over, the guest disappears.
+  const [g2] = await db.insert(s.users).values({ name: "Guest 2", email: "guest-g2@guest.parley.example", kind: "guest", expiresAt: soon }).returning();
+  const [gm2] = await db.insert(s.meetings).values({ ownerId: g2!.id, title: "Second guest call", platform: "google_meet", status: "ready" }).returning();
+  await db.insert(s.scratchpads).values({ meetingId: gm2!.id, userId: g2!.id, body: "remember this" });
+  const merged = await upsertGoogleUser(db, google("g-1", "yash@gmail.com"), g2!.id);
+  assert.equal(merged.userId, fresh.userId);
+  assert.equal((await db.query.meetings.findFirst({ where: eq(s.meetings.id, gm2!.id) }))!.ownerId, fresh.userId);
+  assert.equal((await db.query.scratchpads.findFirst({ where: eq(s.scratchpads.meetingId, gm2!.id) }))!.userId, fresh.userId);
+  assert.equal(await db.query.users.findFirst({ where: eq(s.users.id, g2!.id) }), undefined);
+  // Expired guests are deleted by the sweeper, with everything they recorded.
+  const [old] = await db.insert(s.users).values({ name: "Old guest", email: "guest-old@guest.parley.example", kind: "guest", expiresAt: new Date(Date.now() - 60_000) }).returning();
+  const [oldM] = await db.insert(s.meetings).values({ ownerId: old!.id, title: "Expired call", platform: "zoom", status: "ready" }).returning();
+  const swept = await sweep(db);
+  assert.ok(swept.expiredGuests === 1 && !(await db.query.meetings.findFirst({ where: eq(s.meetings.id, oldM!.id) })) && !!(await db.query.meetings.findFirst({ where: eq(s.meetings.id, gm!.id) })));
+  console.log("✓ accounts: signed sessions (bare/tampered/transplanted rejected); Google upsert by sub, emails normalised, unverified refused; Try-now upgraded in place or merged into an existing account; expired guests swept with their data");
 
   await client.close();
   console.log("\nOpen core verified.");

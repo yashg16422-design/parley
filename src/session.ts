@@ -5,12 +5,13 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "./db";
 import * as s from "./db/schema";
+import { readSession, signSession } from "./session-token";
 
-/** Demo-grade session: which workspace user this browser is. Not authentication. */
+/** Which workspace user this browser is: a signed cookie set by the demo, Try now or Google sign-in. */
 export const UID_COOKIE = "parley_uid";
 
 export async function currentUserId() {
-  return (await cookies()).get(UID_COOKIE)?.value ?? null;
+  return readSession((await cookies()).get(UID_COOKIE)?.value);
 }
 
 type User = typeof s.users.$inferSelect;
@@ -41,5 +42,5 @@ export async function currentUser() {
 }
 
 export async function setSession(userId: string) {
-  (await cookies()).set(UID_COOKIE, userId, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
+  (await cookies()).set(UID_COOKIE, signSession(userId), { httpOnly: true, secure: process.env.NODE_ENV === "production" && !process.env.PARLEY_INSECURE_COOKIES, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
 }
