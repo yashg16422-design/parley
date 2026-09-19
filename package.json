@@ -18,7 +18,7 @@
     "db:seed": "tsx src/db/seed/index.ts",
     "db:verify": "tsx scripts/verify-schema.ts && tsx scripts/verify-ai.ts && tsx scripts/verify-open-core.ts",
     "fixtures:build": "tsc --noEmit -p . && tsx seed/src/build.ts",
-    "verify:routes": "tsx scripts/verify-routes.ts",
+    "verify:routes": "tsx --env-file-if-exists=.env.local scripts/verify-routes.ts",
     "verify:open-core": "tsx scripts/verify-open-core.ts"
   },
   "dependencies": {
