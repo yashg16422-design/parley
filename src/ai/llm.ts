@@ -38,8 +38,10 @@ export function hfClient({
           client.model = model;
           return body.choices?.[0]?.message?.content ?? "";
         }
-        last = `${model}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
-        if (!RETRYABLE.has(res.status)) break;
+        const text = await res.text();
+        last = `${model}: HTTP ${res.status} ${text.slice(0, 200)}`;
+        // A model none of the account's providers serve is a config gap, not a bad request: try the next one.
+        if (!RETRYABLE.has(res.status) && !text.includes("model_not_supported")) break;
       }
       throw new Error(`Hugging Face request failed: ${last}`);
     },
