@@ -3,7 +3,7 @@
 AI meeting notes that cite their sources. An open-core clone of [Fathom](https://fathom.video), built in 24 hours on Next.js, Vercel and Neon Postgres.
 
 - **Live:** https://parley-smoky.vercel.app
-- **Handover guide (how to use it, and how it compares with Fathom):** [HANDOVER.md](HANDOVER.md)
+- **Handover guide (how to use it, and how it compares with Fathom):** [HANDOVER.md](HANDOVER.md) · [illustrated PDF](docs/Parley-Handover.pdf)
 
 Parley records Zoom, Google Meet and Teams calls **from your browser**: your mic plus the meeting tab's audio, with no bot joining the call. It transcribes live with Deepgram and writes notes while you talk. When the call ends you get a summary, action items with owners, clips and a Slack briefing. Every note links to the exact line of the transcript it came from.
 
