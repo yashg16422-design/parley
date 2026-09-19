@@ -97,6 +97,7 @@ export default async function Settings() {
         </Card>
         <Card className="gap-4 p-5">
           <div><h2 className="font-semibold">Integrations</h2><p className="text-sm text-muted-foreground">When a meeting&apos;s notes are ready, Parley sends them to the tools you connect here, using your own tokens.</p></div>
+          {me.kind === "guest" && <p className="rounded-md border bg-muted/40 p-3 text-sm">Try-now workspaces can&apos;t connect integrations. <a href="/api/auth/google" className="font-medium text-primary hover:underline">Sign in with Google</a> to connect Slack, Notion or HubSpot; your recordings come with you.</p>}
           {INTEGRATIONS.map((i) => {
             const on = secrets.some((x) => x.kind === i.kind);
             return (
