@@ -4,6 +4,7 @@ import { hfClient, type LlmClient } from "./ai/llm";
 import { processMeeting, processWindows } from "./ai/pipeline";
 import type { Database } from "./db";
 import * as s from "./db/schema";
+import { notifyMeeting } from "./live-bus";
 
 const rows = <T>(r: unknown) => (r as { rows: T[] }).rows;
 
@@ -41,6 +42,7 @@ export async function drainMeeting(db: Database, meetingId: string, llm: LlmClie
     await db.update(s.processingJobs)
       .set({ status: "succeeded", durationMs: Date.now() - t0, lastError: llm ? null : "no HF_TOKEN: simulated", lockedUntil: null })
       .where(inArray(s.processingJobs.id, ids));
+    if (final) notifyMeeting(meetingId);
     return { ran: ids.length, simulated: !llm };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

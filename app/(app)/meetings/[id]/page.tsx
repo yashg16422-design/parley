@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { LiveWatch } from "@/components/meeting/live-watch";
 import { MeetingView } from "@/components/meeting/meeting-view";
 import { currentUser, meetingDetail } from "@/queries";
 
@@ -8,6 +9,9 @@ export default async function MeetingPage({ params, searchParams }: { params: Pr
   const me = await currentUser();
   const m = await meetingDetail(id, me.id);
   if (!m) notFound();
+  if (m.status === "live" || m.status === "processing") {
+    return <LiveWatch id={m.id} title={m.title} participants={m.participants} initial={m.segments} initialStatus={m.status} />;
+  }
   return (
     <MeetingView
       id={m.id} title={m.title} startedAt={m.startedAt} durationMs={m.durationMs} defaultTemplateId={m.defaultTemplateId}

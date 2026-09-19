@@ -70,6 +70,8 @@ export const meetingStatus = pgEnum("meeting_status", [
   "failed",
 ]);
 export const summaryStatus = pgEnum("summary_status", ["pending", "streaming", "ready", "failed"]);
+/** External video host. Media stays there; Parley stores ids and millisecond ranges only. */
+export const mediaProvider = pgEnum("media_provider", ["mux"]);
 export const actionItemStatus = pgEnum("action_item_status", ["open", "done"]);
 export const itemOrigin = pgEnum("item_origin", ["ai", "manual"]);
 export const jobKind = pgEnum("job_kind", ["chunk_notes", "merge_knowledge", "render_summary", "finalize_stats"]);
@@ -196,6 +198,10 @@ export const meetings = pgTable(
     liveClockMs: integer("live_clock_ms"),
     liveSpeed: smallint("live_speed"),
     liveUpdatedAt: timestamp("live_updated_at", { withTimezone: true }),
+    /** Recording on an external provider (Mux asset + playback id); null until one is uploaded. */
+    mediaProvider: mediaProvider("media_provider"),
+    mediaAssetId: text("media_asset_id"),
+    mediaPlaybackId: text("media_playback_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -204,6 +210,8 @@ export const meetings = pgTable(
     index("meetings_owner_started_idx").on(t.ownerId, t.startedAt.desc()),
     index("meetings_status_idx").on(t.status),
     index("meetings_search_idx").using("gin", t.search),
+    uniqueIndex("meetings_media_asset_uq").on(t.mediaProvider, t.mediaAssetId),
+    check("meetings_media_ck", sql`(${t.mediaProvider} IS NULL) = (${t.mediaAssetId} IS NULL)`),
   ],
 );
 

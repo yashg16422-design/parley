@@ -65,7 +65,7 @@ export default async function Home() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium group-hover:text-primary">{m.title}</span>
-                          {m.status !== "ready" && <Badge variant="secondary" className="capitalize">{m.status}</Badge>}
+                          {m.status === "live" ? <Badge className="gap-1.5 bg-red-600 text-white"><span className="size-1.5 animate-pulse rounded-full bg-white" />Live · watch</Badge> : m.status !== "ready" && <Badge variant="secondary" className="capitalize">{m.status}</Badge>}
                         </div>
                         {m.knowledge && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground"><Sparkles className="mr-1 inline size-3.5 text-primary" />{m.knowledge.knowledge.overview}</p>}
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

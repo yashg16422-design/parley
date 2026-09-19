@@ -1,6 +1,7 @@
 import { and, asc, count, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { closedWindows, type Seg } from "./ai/windows";
+import { notifyMeeting } from "./live-bus";
 import type { Database } from "./db";
 import * as s from "./db/schema";
 import type { MeetingStats } from "./db/json-types";
@@ -17,7 +18,7 @@ const speed = z.int().min(1).max(60);
 const ms = z.int().min(0);
 export const ingestSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("start"), sourceMeetingId: z.uuid(), speed }),
-  /** A real call recorded from the browser mic (Web Speech API); participants are who might speak. */
+  /** A real call recorded from the browser mic (Deepgram live STT); participants are who might speak. */
   z.object({
     op: z.literal("start_mic"),
     title: z.string().trim().min(1).max(160),
@@ -129,6 +130,7 @@ export async function appendLines(db: Database, input: Extract<IngestInput, { op
     .update(s.meetings)
     .set({ liveClockMs: input.clockMs, liveSpeed: input.speed, liveUpdatedAt: now, durationMs: sql`greatest(${s.meetings.durationMs}, ${Math.max(...rows.map((r) => r.endMs))})` })
     .where(eq(s.meetings.id, m.id));
+  if (inserted.length) notifyMeeting(m.id);
   const q = await queueWindows(db, m.id, false);
   return { accepted: inserted.length, nextSeq: Math.max(n, input.fromSeq + rows.length), clockMs: input.clockMs, ...q };
 }
@@ -159,5 +161,6 @@ export async function endCall(db: Database, { meetingId, clockMs }: Extract<Inge
       .set({ status: "processing", endedAt: new Date(), durationMs, liveClockMs: clockMs, stats, transcriptHash: transcriptHash(segs) })
       .where(eq(s.meetings.id, m.id));
   });
+  notifyMeeting(meetingId);
   return { segments: segs.length, durationMs, ...(await queueWindows(db, meetingId, true)) };
 }

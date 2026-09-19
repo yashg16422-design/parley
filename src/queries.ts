@@ -12,6 +12,10 @@ const mine = (userId: string) =>
     exists(getDb().select().from(s.meetingParticipants).where(and(eq(s.meetingParticipants.meetingId, s.meetings.id), eq(s.meetingParticipants.userId, userId)))),
   );
 
+export async function visibleMeeting(id: string, userId: string) {
+  return getDb().query.meetings.findFirst({ where: and(eq(s.meetings.id, id), mine(userId)), columns: { id: true, status: true } });
+}
+
 export async function listMeetings(userId: string) {
   return getDb().query.meetings.findMany({
     where: and(mine(userId), ne(s.meetings.status, "scheduled")),

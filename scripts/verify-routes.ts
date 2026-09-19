@@ -8,6 +8,8 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { wordsToLines } from "../src/lib/deepgram";
+import { checkClipRange, muxClipAssetRequest, muxClipPlaybackUrl } from "../src/media";
 import { stableId } from "../src/lib/stable-id";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
@@ -29,7 +31,50 @@ const summary = async (meetingId: string, templateId?: string) => {
   return { status: r.status, events: (await r.text()).trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>) };
 };
 
+/** Minimal SSE client: collects events until the server closes the stream. */
+function watch(meetingId: string, uid: string | null = MAYA) {
+  const events: { event: string; id?: string; data: unknown; at: number }[] = [];
+  const done = (async () => {
+    const r = await fetch(`${BASE}/api/streams/meetings?meetingId=${meetingId}`, { headers: uid ? { cookie: `parley_uid=${uid}` } : {} });
+    if (!r.ok || !r.body) return r.status;
+    let buf = "";
+    for await (const chunk of r.body.pipeThrough(new TextDecoderStream())) {
+      buf += chunk;
+      for (let i; (i = buf.indexOf("\n\n")) >= 0; buf = buf.slice(i + 2)) {
+        const f = Object.fromEntries(buf.slice(0, i).split("\n").filter((l) => !l.startsWith(":")).map((l) => [l.slice(0, l.indexOf(":")), l.slice(l.indexOf(":") + 1).trim()]));
+        if (f.data) events.push({ event: f.event ?? "message", id: f.id, data: JSON.parse(f.data), at: Date.now() });
+      }
+    }
+    return r.status;
+  })();
+  return { events, done };
+}
+
+function pureChecks() {
+  const lines = wordsToLines([
+    { word: "okay", punctuated_word: "Okay,", start: 0.2, end: 0.5, speaker: 0 },
+    { word: "ship", punctuated_word: "ship", start: 0.6, end: 0.9, speaker: 0 },
+    { word: "it", punctuated_word: "it.", start: 0.9, end: 1.1, speaker: 0 },
+    { word: "agreed", punctuated_word: "Agreed.", start: 1.4, end: 1.9, speaker: 1 },
+  ], 5_000);
+  assert.deepEqual(lines, [{ speaker: 0, startMs: 5200, endMs: 6100, text: "Okay, ship it." }, { speaker: 1, startMs: 6400, endMs: 6900, text: "Agreed." }]);
+  const mux = { mediaProvider: "mux" as const, mediaAssetId: "a1", mediaPlaybackId: "p1" };
+  assert.deepEqual(muxClipAssetRequest(mux, { startMs: 61_250, endMs: 95_000 }), { input: [{ url: "mux://assets/a1", start_time: 61.25, end_time: 95 }], playback_policies: ["public"] });
+  assert.equal(muxClipPlaybackUrl(mux, { startMs: 61_250, endMs: 95_000 }), "https://stream.mux.com/p1.m3u8?asset_start_time=61.25&asset_end_time=95");
+  assert.equal(muxClipAssetRequest({ mediaProvider: null, mediaAssetId: null, mediaPlaybackId: null }, { startMs: 0, endMs: 1 }), null);
+  assert.equal(checkClipRange({ startMs: 0, endMs: 5_000 }, 60_000), null);
+  assert.ok(checkClipRange({ startMs: 50_000, endMs: 70_000 }, 60_000) && checkClipRange({ startMs: 5_000, endMs: 5_000 }, 60_000));
+  console.log("✓ deepgram diarized words → speaker-turn lines with call-clock ms; Mux clip contract (asset + instant playback), range checks");
+}
+
 async function main() {
+  pureChecks();
+  const token = async (uid: string | null) => (await fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: uid ? { cookie: `parley_uid=${uid}` } : {} })).status;
+  assert.equal(await token(null), 401);
+  const tokenStatus = await token(MAYA);
+  assert.ok(process.env.DEEPGRAM_API_KEY ? tokenStatus === 200 : tokenStatus === 503, `token route → ${tokenStatus}`);
+  console.log(`✓ deepgram token route: no session → 401; ${process.env.DEEPGRAM_API_KEY ? "key set → 200" : "no key → 503 (mic room falls back to typing)"}`);
+
   const source = JSON.parse(readFileSync("seed/fixtures/meetings/q4-product-alignment.json", "utf8")).meetings[0];
   const segments: [number, number, number, string][] = source.segments;
 
@@ -110,6 +155,11 @@ async function main() {
   const mic = await post({ op: "start_mic", title: "Beta go/no-go (mic test)", participants: ["Maya Chen", "Raj Patel"], calendarEventId: goNoGo });
   assert.equal(mic.status, 201, JSON.stringify(mic.body));
   const micId = mic.body.meetingId as string;
+  assert.equal(await watch(micId, null).done, 401, "streams need a session");
+  assert.equal(await watch(micId, stableId("user:nobody")).done, 404, "other workspaces can't watch");
+  const watcher = watch(micId);
+  await sleep(300);
+  const sentAt: number[] = [];
   const said = [
     [0, "Okay, let's look at the precision numbers before we decide anything."],
     [1, "We're at eighty-one percent on the new set, so still below the bar."],
@@ -123,6 +173,7 @@ async function main() {
     const now = Date.now() - m0;
     const r = await post({ op: "append", meetingId: micId, clockMs: now, speed: 1, fromSeq: seq, lines: [{ speakerIdx, startMs: Math.max(0, now - 600), endMs: now, text }] });
     assert.equal(r.status, 200, JSON.stringify(r.body));
+    sentAt.push(Date.now());
     seq++;
   }
   assert.equal((await post({ op: "append", meetingId: micId, clockMs: 10 * 60_000, speed: 1, fromSeq: seq, lines: [{ speakerIdx: 0, startMs: 1, endMs: 2, text: "x" }] })).status, 429, "1x clock is enforced for mic calls too");
@@ -130,6 +181,15 @@ async function main() {
   let micState = { status: "" };
   for (let i = 0; i < 40 && micState.status !== "ready"; i++) (await sleep(250)), (micState = await (await fetch(`${BASE}/api/ingest?meetingId=${micId}`)).json());
   assert.equal(micState.status, "ready");
+  assert.equal(await watcher.done, 200);
+  const streamed = watcher.events.filter((e) => e.event === "lines").flatMap((e) => (e.data as { seq: number; text: string }[]).map((l) => ({ ...l, at: e.at })));
+  assert.deepEqual(streamed.map((l) => l.seq), [0, 1, 2, 3], "every line streamed once, in order");
+  assert.deepEqual(streamed.map((l) => l.text), said.map(([, t]) => t));
+  const lag = Math.max(...streamed.map((l, i) => l.at - sentAt[i]!));
+  assert.ok(lag < 1_000, `same-instance lines are pushed on write, not on the 2s poll (lag ${lag}ms)`);
+  const statuses = watcher.events.filter((e) => e.event === "status").map((e) => (e.data as { status: string }).status);
+  assert.deepEqual([statuses[0], statuses.at(-1)], ["live", "ready"], statuses.join());
+  console.log(`✓ SSE: watcher got 4/4 lines in order (worst lag ${lag}ms after the ingest response), statuses ${statuses.join(" → ")}, stream closed; 401/404 for outsiders`);
   const micSummary = await summary(micId);
   const micSections = micSummary.events.filter((e) => e.type === "section").map((e) => e.section as { id: string; items: { text: string }[] });
   assert.equal(micSummary.events[1]?.source, "simulated");

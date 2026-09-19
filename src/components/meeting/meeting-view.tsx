@@ -66,7 +66,7 @@ export function MeetingView(m: MeetingViewProps) {
 
   const saveClip = () => start(async () => {
     const [a, b = a] = clipSel!;
-    const slug = await createClip({ meetingId: m.id, startMs: bySeq.get(a!)!.startMs, endMs: bySeq.get(b!)!.endMs, title: clipTitle || `${m.title} clip` });
+    const { slug } = await createClip({ meetingId: m.id, startMs: bySeq.get(a!)!.startMs, endMs: bySeq.get(b!)!.endMs, title: clipTitle || `${m.title} clip` });
     setNewClip(slug), setClipSel(null), setClipTitle("");
   });
 
@@ -99,7 +99,7 @@ export function MeetingView(m: MeetingViewProps) {
               <>
                 <span className="font-mono text-xs">{clock(bySeq.get(clipSel![0]!)!.startMs)}–{clock(bySeq.get(clipSel!.at(-1)!)!.endMs)}</span>
                 <Input className="h-8 max-w-xs bg-background" placeholder="Clip title" value={clipTitle} onChange={(e) => setClipTitle(e.target.value)} />
-                <Button size="sm" disabled={pending} onClick={saveClip}>Create share link</Button>
+                <Button size="sm" disabled={pending} onClick={saveClip}>Create a Shareable Clip</Button>
                 <span className="text-xs text-muted-foreground">{clipSel!.length === 1 ? "or click the last line" : ""}</span>
               </>
             )}

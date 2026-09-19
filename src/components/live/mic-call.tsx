@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bookmark, Keyboard, Loader2, Mic, PhoneOff, Plus } from "lucide-react";
+import { AlertTriangle, Bookmark, Keyboard, Loader2, Mic, PhoneOff, Plus, Radio } from "lucide-react";
 import { addHighlight } from "@app/actions/meetings";
 import type { Attachment } from "@/db/json-types";
 import { Agenda, Attachments } from "@/components/event-details";
@@ -13,26 +13,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SPEAKER_COLORS } from "@/lib/colors";
+import { openDeepgram, TranscriptionUnavailable, type DgLine } from "@/lib/deepgram";
 import { clock } from "@/lib/format";
-
-// Minimal Web Speech API surface (not in TypeScript's DOM lib yet).
-type SpeechResult = { isFinal: boolean; 0: { transcript: string } };
-type SpeechEvent = { resultIndex: number; results: ArrayLike<SpeechResult> };
-type Recognizer = {
-  continuous: boolean; interimResults: boolean; lang: string;
-  onresult: ((e: SpeechEvent) => void) | null; onerror: ((e: { error: string }) => void) | null; onend: (() => void) | null;
-  start(): void; stop(): void;
-};
-const speechApi = () => (typeof window === "undefined" ? undefined : ((window as never as Record<string, new () => Recognizer>).SpeechRecognition ?? (window as never as Record<string, new () => Recognizer>).webkitSpeechRecognition));
 
 type Line = { speakerIdx: number; startMs: number; endMs: number; text: string };
 type Event = { id: string; title: string; agenda: string | null; attachments: Attachment[] } | null;
-const ERRORS: Record<string, string> = {
-  "not-allowed": "Microphone access is blocked. Allow the mic for this site (address bar → site settings), then try again.",
-  "service-not-allowed": "Speech recognition is disabled in this browser. You can type what's said instead.",
-  "audio-capture": "No microphone was found. Plug one in, or type what's said instead.",
-  network: "The browser's speech service is unreachable (it needs an internet connection). You can type what's said instead.",
+const ERRORS = {
+  blocked: "Microphone access is blocked. Allow the mic for this site (address bar → site settings), then try again.",
+  missing: "No microphone was found. Plug one in, or type what's said instead.",
 };
+const canStream = () => typeof window !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined" && typeof WebSocket !== "undefined";
+type Session = Awaited<ReturnType<typeof openDeepgram>>;
 
 async function ingest(body: object) {
   const r = await fetch("/api/ingest", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -41,7 +32,7 @@ async function ingest(body: object) {
   return json;
 }
 
-/** Records a real conversation: Web Speech API → timestamped lines → /api/ingest in small batches. */
+/** Records a real conversation: mic → Deepgram (nova-3, diarized) → timestamped lines → /api/ingest in small batches. */
 export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Event; defaultSpeakers: string[] }) {
   const router = useRouter();
   const [title, setTitle] = useState(event?.title ?? `Meeting with ${me}`);
@@ -57,37 +48,62 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   const [interim, setInterim] = useState("");
   const [typed, setTyped] = useState("");
   const [now, setNow] = useState(0);
-  const s = useRef({ meetingId: "", t0: 0, sent: 0, pending: [] as Line[], busy: false, live: false, speaker: 0, lastStart: 0, heardAt: new Map<number, number>(), rec: null as Recognizer | null });
+  const s = useRef({
+    meetingId: "", t0: 0, sent: 0, pending: [] as Line[], busy: false, live: false, speaker: 0, lastStart: 0, n: 0,
+    dg: null as Session | null, mic: null as MediaStream | null,
+    /** Deepgram speaker number → participant index; the user corrects it by tapping who's talking. */
+    map: new Map<number, number>(), lastDg: null as number | null,
+  });
 
   useEffect(() => {
-    const ok = !!speechApi();
+    const ok = canStream();
     setSupported(ok);
     if (!ok) setMode("typed");
   }, []);
   useEffect(() => {
     s.current.speaker = speaker;
-  }, [speaker]);
+    s.current.n = speakers.length;
+  }, [speaker, speakers.length]);
+  const who = (dg: number) => s.current.map.get(dg) ?? dg % Math.max(1, s.current.n);
+  /** Tap a person: in typed mode it's who speaks next; with Deepgram it relabels the voice heard last. */
+  const pick = (i: number) => {
+    const S = s.current;
+    if (mode === "mic" && S.lastDg !== null) S.map.set(S.lastDg, i);
+    setSpeaker(i);
+  };
   useEffect(() => {
     if (phase !== "live") return;
     const tick = setInterval(() => (setNow(Date.now() - s.current.t0), flush()), 2000);
     const keys = (e: KeyboardEvent) => {
       const n = Number(e.key);
-      if (!(e.target instanceof HTMLInputElement) && n >= 1 && n <= speakers.length) setSpeaker(n - 1);
+      if (!(e.target instanceof HTMLInputElement) && n >= 1 && n <= speakers.length) pick(n - 1);
     };
     window.addEventListener("keydown", keys);
     return () => (clearInterval(tick), window.removeEventListener("keydown", keys));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, speakers.length]);
+  }, [phase, speakers.length, mode]);
 
-  const addLine = (text: string, heardAt: number) => {
+  const push = (line: Line) => {
+    if (!line.text.trim()) return;
+    s.current.pending.push(line);
+    setLines((l) => [...l, line]);
+  };
+  const addTyped = (text: string) => {
     const S = s.current;
     const endMs = Date.now() - S.t0;
-    const startMs = Math.min(endMs, Math.max(S.lastStart, heardAt - S.t0));
+    const startMs = Math.max(S.lastStart, endMs - Math.min(8000, text.split(/\s+/).length * 400));
     S.lastStart = startMs;
-    const line = { speakerIdx: S.speaker, startMs, endMs, text: text.trim() };
-    if (!line.text) return;
-    S.pending.push(line);
-    setLines((l) => [...l, line]);
+    push({ speakerIdx: S.speaker, startMs, endMs, text: text.trim() });
+  };
+  const addHeard = (dl: DgLine[]) => {
+    const S = s.current;
+    for (const l of dl) {
+      const startMs = Math.max(S.lastStart, l.startMs);
+      S.lastStart = startMs;
+      S.lastDg = l.speaker;
+      push({ speakerIdx: who(l.speaker), startMs, endMs: Math.max(startMs, l.endMs), text: l.text });
+    }
+    if (dl.length) setSpeaker(who(dl.at(-1)!.speaker));
   };
 
   async function flush(all = false) {
@@ -109,59 +125,53 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
     }
   }
 
-  function listen() {
-    const Api = speechApi()!;
-    const rec = new Api();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = navigator.language || "en-US";
-    rec.onresult = (e) => {
-      let partial = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i]!;
-        if (!s.current.heardAt.has(i)) s.current.heardAt.set(i, Date.now());
-        if (r.isFinal) {
-          addLine(r[0].transcript, s.current.heardAt.get(i)!);
-          s.current.heardAt.delete(i);
-        } else partial += r[0].transcript;
-      }
-      setInterim(partial);
-    };
-    rec.onerror = (e) => {
-      if (e.error === "no-speech" || e.error === "aborted") return;
-      setWarn(ERRORS[e.error] ?? `Speech recognition error: ${e.error}`);
-      if (e.error in ERRORS) (s.current.live = false), setMode("typed");
-    };
-    // Browsers end recognition after silence or ~60s; keep it running while the call is live.
-    rec.onend = () => {
-      s.current.heardAt.clear();
-      if (s.current.live) try { rec.start(); } catch { /* already restarting */ }
-    };
-    rec.start();
-    s.current.rec = rec;
+  async function listen() {
+    const S = s.current;
+    S.dg = await openDeepgram(S.mic!, () => Date.now() - S.t0, {
+      onLines: addHeard,
+      onInterim: (text, dg) => {
+        setInterim(text);
+        if (dg !== null) (S.lastDg = dg), setSpeaker(who(dg));
+      },
+      // Network blips or token expiry: reconnect with a fresh token while the call is live.
+      onDrop: (reason) => {
+        if (!S.live) return;
+        setWarn(`Transcription reconnecting (${reason})…`);
+        setTimeout(() => S.live && listen().then(() => setWarn(null), (e) => setWarn(`Transcription stopped: ${e.message}. Type lines instead.`)), 1_000);
+      },
+    });
   }
+
+  const stopMic = () => (s.current.mic?.getTracks().forEach((t) => t.stop()), (s.current.mic = null));
 
   async function start() {
     setWarn(null);
+    const S = s.current;
     let useMic = supported && mode === "mic";
     if (useMic) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
+        S.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       } catch (e) {
-        const name = e instanceof DOMException ? e.name : "";
-        setWarn(name === "NotFoundError" ? ERRORS["audio-capture"]! : ERRORS["not-allowed"]!);
+        setWarn(e instanceof DOMException && e.name === "NotFoundError" ? ERRORS.missing : ERRORS.blocked);
         useMic = false;
         setMode("typed");
       }
     }
     try {
       const r = await ingest({ op: "start_mic", title, participants: speakers, calendarEventId: event?.id });
-      Object.assign(s.current, { meetingId: r.meetingId, t0: Date.now(), live: useMic });
+      Object.assign(S, { meetingId: r.meetingId, t0: Date.now(), live: useMic });
       setIds(r.participants.map((p: { id?: string; speakerIdx: number }) => p.id ?? String(p.speakerIdx)));
       setPhase("live");
-      if (useMic) listen();
+      if (useMic) {
+        await listen().catch((e) => {
+          S.live = false;
+          stopMic();
+          setMode("typed");
+          setWarn(`${e instanceof TranscriptionUnavailable ? `Live transcription is unavailable: ${e.message}` : `Couldn't start transcription: ${e}`}. You can type what's said instead.`);
+        });
+      }
     } catch (e) {
+      stopMic();
       setWarn(`Couldn't start the meeting: ${e instanceof Error ? e.message : e}`);
     }
   }
@@ -170,8 +180,9 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
     setPhase("ending");
     const S = s.current;
     S.live = false;
-    S.rec?.stop();
-    if (interim) addLine(interim, Date.now());
+    await S.dg?.stop();
+    stopMic();
+    setInterim("");
     try {
       while (S.busy) await new Promise((r) => setTimeout(r, 100));
       await flush(true);
@@ -204,6 +215,7 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
         {phase === "setup" && <Button onClick={start} disabled={!title.trim()}>{supported && mode === "mic" ? <><Mic />Record live microphone</> : <><Keyboard />Start (type lines)</>}</Button>}
         {phase === "live" && (
           <>
+            <Button variant="ghost" asChild><a href={`/meetings/${s.current.meetingId}`} target="_blank" rel="noreferrer"><Radio />Live view</a></Button>
             <Button variant="outline" onClick={() => addHighlight(s.current.meetingId, Date.now() - s.current.t0)}><Bookmark />Highlight</Button>
             <Button variant="destructive" onClick={end}><PhoneOff />End & get notes</Button>
           </>
@@ -215,7 +227,7 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
         {(warn || !supported) && (
           <p className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            {warn ?? "This browser doesn't support live speech recognition (try Chrome, Edge or Safari). You can still type what's said, and notes work the same."}
+            {warn ?? "This browser can't stream microphone audio (try Chrome, Edge or Firefox). You can still type what's said, and notes work the same."}
           </p>
         )}
         <div className="space-y-3 border-b bg-zinc-950 p-3">
@@ -223,7 +235,7 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
           <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-1.5 text-xs text-zinc-400">
             Speaking now:
             {speakers.map((n, i) => (
-              <button key={i} onClick={() => setSpeaker(i)} className={`rounded-full px-2.5 py-1 ${i === speaker ? "bg-primary text-primary-foreground" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}>
+              <button key={i} onClick={() => pick(i)} className={`rounded-full px-2.5 py-1 ${i === speaker ? "bg-primary text-primary-foreground" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}>
                 {i + 1}. {n}
               </button>
             ))}
@@ -238,9 +250,9 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
         <div className="min-h-0 flex-1 overflow-y-auto">
           {phase === "setup" ? (
             <div className="mx-auto max-w-lg space-y-2 p-8 text-center text-sm text-muted-foreground">
-              <p>Join your call in its usual app, then press <b>Record live microphone</b>. Speech is transcribed live and sent to Parley in small batches; notes build as you talk.</p>
-              <p>Your browser can't tell voices apart, so tap who's speaking (or press 1–{speakers.length}).</p>
-              <p className="text-xs">Chrome sends audio to Google's speech service for recognition; Parley stores only the text.</p>
+              <p>Join your call in its usual app, then press <b>Record live microphone</b>. Audio streams to Deepgram (nova-3) for live transcription; lines reach Parley in small batches and anyone watching the meeting sees them live.</p>
+              <p>Deepgram tells voices apart on its own. If it labels someone wrong, tap who&apos;s actually talking (or press 1–{speakers.length}) and that voice stays with them.</p>
+              <p className="text-xs">Audio goes from your browser straight to Deepgram; Parley stores only the text.</p>
               {supported && <button onClick={() => setMode(mode === "mic" ? "typed" : "mic")} className="text-xs text-primary hover:underline">{mode === "mic" ? "No mic? Type lines instead" : "Use the microphone instead"}</button>}
             </div>
           ) : (
@@ -253,7 +265,7 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
           <div ref={bottom} />
         </div>
         {phase === "live" && mode === "typed" && (
-          <form onSubmit={(e) => (e.preventDefault(), typed.trim() && (addLine(typed, Date.now() - Math.min(8000, typed.split(/\s+/).length * 400)), setTyped("")))} className="flex gap-2 border-t p-3">
+          <form onSubmit={(e) => (e.preventDefault(), typed.trim() && (addTyped(typed), setTyped("")))} className="flex gap-2 border-t p-3">
             <Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={`${speakers[speaker]} says…`} />
             <Button>Add</Button>
           </form>
