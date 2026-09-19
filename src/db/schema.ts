@@ -503,6 +503,30 @@ export const rateLimits = pgTable("rate_limits", {
   hits: timestamp("hits", { withTimezone: true }).array().notNull(),
 });
 
+const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
+  dataType: () => "bytea",
+  fromDriver: (v) => Buffer.from(v),
+});
+
+/**
+ * The meeting's own audio, recorded in the browser (webm/opus, ~15 MB per hour)
+ * and uploaded in ordered ~5 s chunks while the call runs, so it survives a
+ * closed tab and each request stays well under serverless body limits.
+ * `startMs` is where chunk 0 begins on the call clock.
+ */
+export const recordingChunks = pgTable(
+  "recording_chunks",
+  {
+    meetingId: uuid("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    startMs: integer("start_ms").notNull(),
+    mime: text("mime").notNull(),
+    data: bytea("data").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.meetingId, t.idx] })],
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   calendarConnections: many(calendarConnections),
   calendarEvents: many(calendarEvents),

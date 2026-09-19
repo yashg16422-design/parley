@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { OverlayLoading } from "@/components/loading-dots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { clock } from "@/lib/format";
@@ -30,6 +31,7 @@ export function LiveWatch({ id, title, participants, initial, initialStatus }: {
     es.addEventListener("status", (e) => {
       const st = (JSON.parse(e.data) as { status: string }).status;
       setStatus(st);
+      if (st === "deleted") return es.close(), router.push("/home");
       if (st === "ready" || st === "failed" || st === "abandoned") es.close(), router.refresh();
     });
     return () => es.close();
@@ -57,6 +59,7 @@ export function LiveWatch({ id, title, participants, initial, initialStatus }: {
       <div className="border-b bg-zinc-950 p-3">
         <ParticipantGrid participants={participants} activeId={status === "live" ? last?.participantId : null} className="mx-auto max-w-3xl [&>div]:max-h-[16dvh]" />
       </div>
+      {status === "processing" && <OverlayLoading label="The call ended. Writing notes…" />}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Transcript segments={segs} colors={Object.fromEntries(participants.map((p) => [p.id, p.color]))} activeIdx={segs.length - 1} onLine={() => {}} />
         {!segs.length && <p className="p-10 text-center text-sm text-muted-foreground">Waiting for the first words…</p>}

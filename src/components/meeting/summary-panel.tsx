@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingDots } from "@/components/loading-dots";
 import { clock } from "@/lib/format";
 
 type Section = { id: string; heading: string; items: { text: string; seqs: number[] }[] };
@@ -59,7 +59,7 @@ export function SummaryPanel({ meetingId, templates, initial, startOf, onCite }:
         {meta && <Badge variant={meta.source === "simulated" ? "outline" : "secondary"} title={meta.note ?? meta.model ?? ""}>{SOURCE[meta.source]}</Badge>}
       </div>
       {error && <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-      {!error && !sections.length && <div className="space-y-2">{[80, 95, 60, 90].map((w) => <Skeleton key={w} className="h-4" style={{ width: `${w}%` }} />)}</div>}
+      {!error && !sections.length && <LoadingDots label="Preparing summary…" className="py-10" />}
       {sections.map((sec) => (
         <section key={sec.id} className="animate-in fade-in slide-in-from-bottom-1">
           <h3 className="mb-1.5 text-sm font-semibold">{sec.heading}</h3>

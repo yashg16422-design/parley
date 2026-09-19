@@ -52,7 +52,9 @@ export async function meetingDetail(id: string, userId?: string) {
     }),
     db.query.templates.findMany({ orderBy: asc(s.templates.sortOrder), columns: { id: true, name: true, description: true } }),
   ]);
-  return m ? { ...m, templates } : null;
+  if (!m) return null;
+  const [recording] = await db.select({ startMs: s.recordingChunks.startMs, mime: s.recordingChunks.mime }).from(s.recordingChunks).where(and(eq(s.recordingChunks.meetingId, id), eq(s.recordingChunks.idx, 0)));
+  return { ...m, templates, recording: recording ?? null };
 }
 
 export async function openActionItems(userId: string) {

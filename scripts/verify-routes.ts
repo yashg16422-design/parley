@@ -115,6 +115,26 @@ async function openCore(mayasMeeting: string) {
   console.log("✓ iCal route: host allowlist → 400, not connected → 404, calendar-scoped token accepted, no auth → 401");
   for (const path of ["/settings", "/live/mic"]) assert.equal(await peek(MAYA, path), 200, path);
 
+  // Call recordings: owner uploads ordered chunks (idempotent); visible users stream with Range; outsiders get 404.
+  const rec = (await post({ op: "start_mic", title: "Recorded call", participants: ["Maya Chen"] })).body.meetingId as string;
+  const put = (idx: number, body: string, uid = MAYA, type = "audio/webm;codecs=opus") =>
+    fetch(`${BASE}/api/recordings/${rec}?idx=${idx}&startMs=120`, { method: "POST", headers: { "content-type": type, cookie: `parley_uid=${uid}` }, body });
+  assert.deepEqual([(await put(0, "AAAA")).status, (await put(1, "BBBB")).status, (await put(0, "XXXX")).status], [200, 200, 200]);
+  assert.deepEqual([(await put(2, "CC", RAJ)).status, (await put(2, "CC", MAYA, "text/html")).status], [404, 400]);
+  const get = (uid: string | null, range?: string) => fetch(`${BASE}/api/recordings/${rec}`, { headers: { ...(uid ? { cookie: `parley_uid=${uid}` } : {}), ...(range ? { range } : {}) } });
+  const full = await get(MAYA);
+  assert.deepEqual([full.status, await full.text(), full.headers.get("content-type")], [200, "AAAABBBB", "audio/webm"], "chunks in order; the retried chunk 0 wasn't duplicated");
+  const part = await get(MAYA, "bytes=2-5");
+  assert.deepEqual([part.status, await part.text(), part.headers.get("content-range")], [206, "AABB", "bytes 2-5/8"]);
+  assert.deepEqual([(await get(RAJ)).status, (await get(null)).status, (await get(MAYA, "bytes=50-60")).status], [404, 401, 416]);
+  console.log("✓ recordings: ordered idempotent chunk upload (owner only, audio/* only), streamed with Range (206/416), hidden from other users");
+
+  // Leaving a call: discard deletes it (and its audio) for the owner only.
+  assert.equal((await post({ op: "discard", meetingId: rec }, RAJ)).status, 404);
+  assert.equal((await post({ op: "discard", meetingId: rec })).status, 200);
+  assert.deepEqual([(await post({ op: "discard", meetingId: rec })).status, (await get(MAYA)).status], [404, 404], "gone, recording included");
+  console.log("✓ discard: owner deletes the live call and its recording; others 404; second discard 404");
+
   // Deepgram token rate limit (20 per user per 10 min): burst until refused.
   const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${RAJ}` } });
   let allowed = 0, refused: Response | null = null;

@@ -14,7 +14,9 @@ import { ParticipantGrid, type Participant } from "./participant-grid";
 import { createPlayer, jumpTo, lineAt, type Seg, usePlayer } from "./player";
 import { Scrubber } from "./scrubber";
 import { ActionItems, type ActionItemView, Moments, TalkTime } from "./side-lists";
+import { SoundToggle } from "./sound-toggle";
 import { SummaryPanel } from "./summary-panel";
+import { useMeetingSound } from "./use-sound";
 import { Transcript } from "./transcript";
 
 export type MeetingViewProps = {
@@ -28,6 +30,7 @@ export type MeetingViewProps = {
   templates: { id: string; name: string }[];
   initialMs: number;
   event?: { id: string; agenda: string | null; attachments: Attachment[] } | null;
+  recording: { startMs: number } | null;
 };
 
 export function MeetingView(m: MeetingViewProps) {
@@ -70,6 +73,8 @@ export function MeetingView(m: MeetingViewProps) {
     setNewClip(slug), setClipSel(null), setClipTitle("");
   });
 
+  const speakerOrder = useMemo(() => m.participants.map((p) => p.id), [m.participants]);
+  const sound = useMeetingSound(player, { meetingId: m.id, recording: m.recording, segments: m.segments, speakerOrder });
   const speaker = m.segments[activeIdx]?.participantId;
   return (
     <div className="grid lg:h-dvh lg:grid-cols-[minmax(0,1fr)_400px]">
@@ -88,7 +93,7 @@ export function MeetingView(m: MeetingViewProps) {
 
         <div className="space-y-3 border-b bg-zinc-950 p-3">
           <ParticipantGrid participants={m.participants} activeId={speaker} className="mx-auto max-h-[34dvh] max-w-3xl [&>div]:max-h-[16dvh]" />
-          <div className="rounded-lg bg-background px-3 py-2"><Scrubber player={player} chapters={m.chapters} markers={highlights} /></div>
+          <div className="space-y-1 rounded-lg bg-background px-3 pt-2 pb-1"><Scrubber player={player} chapters={m.chapters} markers={highlights} /><SoundToggle {...sound} /></div>
         </div>
 
         {(clipSel || newClip) && (

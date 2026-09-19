@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { badRequest, errorResponse, jsonError } from "@/http";
 import { drainMeeting } from "@/jobs";
-import { appendLines, endCall, ingestSchema, startMic, startSimulation } from "@/live";
+import { appendLines, discardCall, endCall, ingestSchema, startMic, startSimulation } from "@/live";
 import { requestUser } from "@/auth";
 import { visibleMeeting } from "@/queries";
 
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     if (input.op === "start" || input.op === "start_mic") {
       return Response.json(input.op === "start" ? await startSimulation(db, me.id, input) : await startMic(db, me, input), { status: 201 });
     }
+    if (input.op === "discard") return Response.json(await discardCall(db, me.id, input));
     const result = input.op === "append" ? await appendLines(db, me.id, input) : await endCall(db, me.id, input);
     // Window processing runs after the response is sent; the client never waits on the model.
     if (result.queued > 0) {

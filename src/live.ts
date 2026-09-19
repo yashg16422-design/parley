@@ -35,6 +35,8 @@ export const ingestSchema = z.discriminatedUnion("op", [
     lines: z.array(z.object({ speakerIdx: z.int().min(0), startMs: ms, endMs: ms, text: z.string().trim().min(1).max(4000) })).min(1).max(200),
   }),
   z.object({ op: z.literal("end"), meetingId: z.uuid(), clockMs: ms }),
+  /** Leave without keeping anything: deletes the live call and everything recorded so far. */
+  z.object({ op: z.literal("discard"), meetingId: z.uuid() }),
 ]);
 export type IngestInput = z.infer<typeof ingestSchema>;
 
@@ -164,4 +166,11 @@ export async function endCall(db: Database, ownerId: string, { meetingId, clockM
   });
   notifyMeeting(meetingId);
   return { segments: segs.length, durationMs, ...(await queueWindows(db, meetingId, true)) };
+}
+
+export async function discardCall(db: Database, ownerId: string, { meetingId }: Extract<IngestInput, { op: "discard" }>) {
+  const gone = await db.delete(s.meetings).where(and(eq(s.meetings.id, meetingId), eq(s.meetings.ownerId, ownerId), eq(s.meetings.status, "live"))).returning({ id: s.meetings.id });
+  if (!gone.length) throw new HttpError(404, "no live call to discard");
+  notifyMeeting(meetingId);
+  return { discarded: true, queued: 0 };
 }

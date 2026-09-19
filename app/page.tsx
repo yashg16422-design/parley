@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Database, Mic, Waves } from "lucide-react";
 import { enterDemo, startFresh } from "@app/actions/workspace";
+import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             <h2 className="text-lg font-semibold">Enter Reviewer Demo Workspace</h2>
             <p className="mt-1 text-sm text-muted-foreground">Sign in as Maya Chen, VP of Product: 20 recorded meetings including an 8-person hour-long alignment call, AI notes, action items, clips and a busy calendar.</p>
           </div>
-          <form action={enterDemo} className="mt-auto"><Button className="w-full">Enter demo workspace<ArrowRight /></Button></form>
+          <form action={enterDemo} className="mt-auto"><SubmitButton className="w-full">Enter demo workspace<ArrowRight /></SubmitButton></form>
         </Card>
         <Card className="gap-4 p-6">
           <Mic className="size-6 text-primary" />
@@ -33,7 +34,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           </div>
           <form action={startFresh} className="mt-auto flex gap-2">
             <Input name="name" placeholder="Your name" maxLength={60} className="flex-1" />
-            <Button variant="outline">Start fresh<ArrowRight /></Button>
+            <SubmitButton variant="outline">Start fresh<ArrowRight /></SubmitButton>
           </form>
         </Card>
       </div>

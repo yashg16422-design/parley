@@ -1,6 +1,7 @@
 import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves, Settings } from "lucide-react";
 import { leaveWorkspace } from "@app/actions/workspace";
 import { NavLink } from "@/components/nav-link";
+import { SubmitButton } from "@/components/submit-button";
 import { PersonAvatar } from "@/components/person";
 import { currentUser } from "@/queries";
 
@@ -27,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <div className="truncate text-muted-foreground">{me.title}</div>
           </div>
           <form action={leaveWorkspace}>
-            <button title="Switch workspace" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><LogOut className="size-4" /></button>
+            <SubmitButton variant="ghost" size="icon" title="Switch workspace" className="size-7 text-muted-foreground"><LogOut className="size-4" /></SubmitButton>
           </form>
         </div>
       </aside>

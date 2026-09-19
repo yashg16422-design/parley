@@ -3,7 +3,7 @@ import { disconnectFeed, removeProviderKey, revoke } from "@app/actions/settings
 import { FeedForm, KeyForm, TokenForm } from "@/components/settings-forms";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Card } from "@/components/ui/card";
 import { getDb } from "@/db";
 import * as s from "@/db/schema";
@@ -41,7 +41,7 @@ export default async function Settings() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-medium">{p.name}</h3>
                   {mine ? <Badge>Your key ····{mine.last4}</Badge> : <Badge variant="secondary">{process.env[p.env] ? "Using server key" : "Not configured"}</Badge>}
-                  {mine && <form action={removeProviderKey} className="ml-auto"><input type="hidden" name="kind" value={p.kind} /><Button size="sm" variant="ghost">Remove</Button></form>}
+                  {mine && <form action={removeProviderKey} className="ml-auto"><input type="hidden" name="kind" value={p.kind} /><SubmitButton size="sm" variant="ghost">Remove</SubmitButton></form>}
                 </div>
                 <p className="text-xs text-muted-foreground">{p.hint}</p>
                 {vault && <KeyForm kind={p.kind} placeholder={p.placeholder} />}
@@ -54,7 +54,7 @@ export default async function Settings() {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-semibold">Calendar via iCal (no Google sign-in)</h2>
             {feed && <Badge variant={feed.lastSyncError ? "destructive" : "secondary"}>{feed.lastSyncError ? "Sync failed" : feed.lastSyncedAt ? `Synced ${fmtDay(feed.lastSyncedAt)} ${fmtTime(feed.lastSyncedAt)}` : "Connected"}</Badge>}
-            {feed && <form action={disconnectFeed} className="ml-auto"><Button size="sm" variant="ghost">Disconnect</Button></form>}
+            {feed && <form action={disconnectFeed} className="ml-auto"><SubmitButton size="sm" variant="ghost">Disconnect</SubmitButton></form>}
           </div>
           <p className="text-sm text-muted-foreground">Google Calendar → Settings → your calendar → <b>Secret address in iCal format</b>. Read-only; video calls from the last week and next 30 days appear on your calendar. Treat the address like a password; reset it in Google to revoke access.</p>
           {feed?.lastSyncError && <p className="text-sm text-destructive">{feed.lastSyncError}</p>}
@@ -69,7 +69,7 @@ export default async function Settings() {
               <code className="text-xs">{t.prefix}…</code><span className="font-medium">{t.name}</span>
               {t.scopes.map((x) => <Badge key={x} variant="outline">{x}</Badge>)}
               <span className="text-xs text-muted-foreground">{t.lastUsedAt ? `used ${fmtDay(t.lastUsedAt)}` : "never used"}</span>
-              <form action={revoke} className="ml-auto"><input type="hidden" name="id" value={t.id} /><Button size="sm" variant="ghost">Revoke</Button></form>
+              <form action={revoke} className="ml-auto"><input type="hidden" name="id" value={t.id} /><SubmitButton size="sm" variant="ghost">Revoke</SubmitButton></form>
             </div>
           ))}
         </Card>

@@ -20,6 +20,7 @@ export default async function MeetingPage({ params, searchParams }: { params: Pr
       event={m.calendarEvent}
       chapters={m.knowledge?.knowledge.topics.map(({ title, startMs, endMs }) => ({ title, startMs, endMs })) ?? []}
       initialMs={Math.max(0, Number(t) || 0)}
+      recording={m.recording}
     />
   );
 }

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { CalendarDays, Loader2, Search } from "lucide-react";
+import { CalendarDays, Search } from "lucide-react";
+import { LoadingDots } from "@/components/loading-dots";
 import { searchAction, type SearchResult } from "@app/actions/search";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,13 +24,13 @@ export function SearchView({ initial }: { initial: string }) {
       <form onSubmit={(e) => (e.preventDefault(), run(q))} className="relative">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input autoFocus className="h-11 pl-9 text-base" placeholder="Search every call… try “SSO” or “single sign-on”" value={q} onChange={(e) => setQ(e.target.value)} />
-        {pending && <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
       </form>
       <div className="flex flex-wrap gap-2">
         {SUGGESTIONS.map((s) => <button key={s} onClick={() => run(s)} className="rounded-full border px-3 py-1 text-xs text-muted-foreground hover:border-primary hover:text-primary">{s}</button>)}
       </div>
-      {res && !res.ok && <p className="text-sm text-destructive">{res.error}</p>}
-      {res?.ok && (
+      {pending && <LoadingDots label="Searching your calls…" className="py-16" />}
+      {!pending && res && !res.ok && <p className="text-sm text-destructive">{res.error}</p>}
+      {!pending && res?.ok && (
         <>
           <p className="text-xs text-muted-foreground">{res.hits.length} moments in {res.meetings} meetings{res.events.length ? `, ${res.events.length} calendar events` : ""}{res.expanded.includes("|") && <> · also matching synonyms (<code className="text-[11px]">{res.expanded}</code>)</>}</p>
           {res.events.length > 0 && (

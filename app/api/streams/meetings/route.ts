@@ -67,7 +67,7 @@ export async function GET(req: Request) {
               send(`id: ${lastSeq}\nevent: lines\ndata: ${JSON.stringify(segs)}\n\n`);
               if (segs.length === 500) again = true;
             }
-            if (!m) return close();
+            if (!m) return send(`event: status\ndata: {"status":"deleted"}\n\n`), close();
             if (m.status !== lastStatus) {
               lastStatus = m.status;
               send(`event: status\ndata: ${JSON.stringify(m)}\n\n`);

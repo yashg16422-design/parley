@@ -135,3 +135,9 @@
 .transcript-line { content-visibility: auto; contain-intrinsic-size: auto 52px; }
 @keyframes eq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 .eq-bar { animation: eq 0.9s ease-in-out infinite; transform-origin: bottom; }
+
+/* Three-dot loader */
+@keyframes dot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+.loading-dot { animation: dot 1.2s ease-in-out infinite; }
+.loading-dot:nth-child(2) { animation-delay: 0.15s; }
+.loading-dot:nth-child(3) { animation-delay: 0.3s; }

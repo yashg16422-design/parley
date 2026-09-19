@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bookmark, Loader2, PhoneOff, Radio, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Bookmark, PhoneOff, Radio, Sparkles, X } from "lucide-react";
+import { OverlayLoading } from "@/components/loading-dots";
+import { LeaveCallDialog, useLeaveGuard } from "./leave-dialog";
 import { addHighlight } from "@app/actions/meetings";
 import { ParticipantGrid, type Participant } from "@/components/meeting/participant-grid";
 import { lineAt, type Seg } from "@/components/meeting/player";
@@ -30,6 +33,9 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
   const [windows, setWindows] = useState(0);
   const [marks, setMarks] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const [endingLabel, setEndingLabel] = useState("Writing your notes…");
+  useLeaveGuard(phase === "live");
   const live = useRef({ meetingId: "", sent: 0, clock: 0, speed: initialSpeed, busy: false });
   const bottom = useRef<HTMLDivElement>(null);
   const endMs = segments.at(-1)?.endMs ?? 0;
@@ -50,9 +56,17 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
     }
   };
 
+  const discard = async () => {
+    setLeaving(false), setEndingLabel("Discarding…"), setPhase("ending");
+    if (live.current.meetingId) await ingest({ op: "discard", meetingId: live.current.meetingId }).catch(() => {});
+    router.push("/live");
+  };
+
   const end = async () => {
-    setPhase("ending");
+    setLeaving(false);
     const L = live.current;
+    if (!segments.some((s) => s.endMs <= L.clock)) return discard();
+    setEndingLabel("Writing your notes…"), setPhase("ending");
     try {
       while (L.sent < segments.filter((s) => s.endMs <= L.clock).length) await flush(true);
       await ingest({ op: "end", meetingId: L.meetingId, clockMs: Math.round(L.clock) });
@@ -104,6 +118,7 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
   return (
     <div className="grid h-dvh grid-rows-[auto_auto_1fr]">
       <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+        {(phase === "ready" || phase === "error") && <Button variant="ghost" size="icon" asChild><Link href="/live" aria-label="Back"><ArrowLeft /></Link></Button>}
         {phase === "live" ? <Badge className="gap-1.5 bg-red-600 text-white"><span className="size-1.5 animate-pulse rounded-full bg-white" />REC {clock(clockMs)}</Badge> : <Badge variant="secondary"><Radio />Simulated call</Badge>}
         <h1 className="min-w-0 flex-1 truncate font-semibold">{source.title}</h1>
         <div className="flex items-center gap-1 rounded-lg border p-0.5">
@@ -116,9 +131,9 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
           <>
             <Button variant="outline" onClick={() => addHighlight(live.current.meetingId, live.current.clock).then(() => setMarks((m) => [...m, live.current.clock]))}><Bookmark />Highlight</Button>
             <Button variant="destructive" onClick={end}><PhoneOff />End call</Button>
+            <Button variant="ghost" size="icon" aria-label="Leave call" onClick={() => setLeaving(true)}><X /></Button>
           </>
         )}
-        {phase === "ending" && <Button disabled><Loader2 className="animate-spin" />Writing notes…</Button>}
       </header>
       <div className="space-y-2 border-b bg-zinc-950 p-3">
         <ParticipantGrid participants={participants} activeId={phase === "live" ? segments[active]?.participantId : null} className="mx-auto max-w-4xl [&>div]:max-h-[18dvh]" />
@@ -137,6 +152,8 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
         )}
         <div ref={bottom} />
       </div>
+      <LeaveCallDialog open={leaving} onOpenChange={setLeaving} onEnd={end} onDiscard={discard} hasContent={segments.some((x) => x.endMs <= clockMs)} />
+      {phase === "ending" && <OverlayLoading label={endingLabel} />}
     </div>
   );
 }

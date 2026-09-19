@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Bookmark, Keyboard, Loader2, Mic, PhoneOff, Plus, Radio } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowLeft, Bookmark, Keyboard, Mic, Pause, PhoneOff, Play, Plus, Radio, X } from "lucide-react";
 import { addHighlight } from "@app/actions/meetings";
 import type { Attachment } from "@/db/json-types";
 import { Agenda, Attachments } from "@/components/event-details";
@@ -14,6 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SPEAKER_COLORS } from "@/lib/colors";
 import { MIC, pickMeetingTab, startDualCapture } from "@/capture/dual-stream";
+import { type Archive, captureGraph, startArchive } from "@/capture/recorder";
+import { OverlayLoading } from "@/components/loading-dots";
+import { InlineDots } from "@/components/submit-button";
+import { LeaveCallDialog, useLeaveGuard } from "./leave-dialog";
 import { openDeepgram, TranscriptionUnavailable, type DgLine } from "@/lib/deepgram";
 import { clock } from "@/lib/format";
 
@@ -40,6 +45,11 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   const [speakers, setSpeakers] = useState(defaultSpeakers);
   const [newName, setNewName] = useState("");
   const [phase, setPhase] = useState<"setup" | "live" | "ending">("setup");
+  const [paused, setPaused] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [endingLabel, setEndingLabel] = useState("Saving the recording and writing your notes…");
+  useLeaveGuard(phase === "live");
   const [supported, setSupported] = useState(true);
   const [mode, setMode] = useState<"mic" | "typed">("mic");
   const [tabAudio, setTabAudio] = useState(false);
@@ -54,6 +64,7 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   const s = useRef({
     meetingId: "", t0: 0, sent: 0, pending: [] as Line[], busy: false, live: false, speaker: 0, lastStart: 0, n: 0,
     dg: null as Session | null, mic: null as MediaStream | null, tab: null as MediaStream | null,
+    graph: null as ReturnType<typeof captureGraph> | null, archive: null as Archive | null,
     /** Deepgram speaker number → participant index; the user corrects it by tapping who's talking. */
     map: new Map<number, number>(), lastDg: null as number | null,
   });
@@ -136,15 +147,15 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
 
   async function listen() {
     const S = s.current;
-    if (S.tab) {
-      S.dg = await startDualCapture({ mic: S.mic!, tab: S.tab }, () => Date.now() - S.t0, {
+    if (S.graph?.tab) {
+      S.dg = await startDualCapture({ mic: S.graph.mic, tab: S.graph.tab }, () => Date.now() - S.t0, {
         onLines: addHeard,
         onInterim: (_, text, dg) => (setInterim(text), dg !== null && ((S.lastDg = dg), setSpeaker(who(dg)))),
         onWarn: setWarn,
       });
       return;
     }
-    S.dg = await openDeepgram(S.mic!, () => Date.now() - S.t0, {
+    S.dg = await openDeepgram(S.graph!.mic, () => Date.now() - S.t0, {
       onLines: addHeard,
       onInterim: (text, dg) => {
         setInterim(text);
@@ -160,11 +171,29 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   }
 
   const stopMic = () => {
-    for (const k of ["mic", "tab"] as const) s.current[k]?.getTracks().forEach((t) => t.stop()), (s.current[k] = null);
+    const S = s.current;
+    for (const k of ["mic", "tab"] as const) S[k]?.getTracks().forEach((t) => t.stop()), (S[k] = null);
+    S.graph?.close(), (S.graph = null);
+  };
+
+  /** Pausing mutes the audio graph: silence keeps the recording and timestamps aligned with the clock. */
+  const togglePause = () => {
+    s.current.graph?.setMuted(!paused);
+    setPaused(!paused);
+    setInterim("");
   };
 
   async function start() {
     setWarn(null);
+    setStarting(true);
+    try {
+      await begin();
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function begin() {
     const S = s.current;
     let useMic = supported && mode === "mic";
     if (useMic) {
@@ -184,11 +213,16 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
     try {
       const r = await ingest({ op: "start_mic", title, participants: speakers, calendarEventId: event?.id });
       Object.assign(S, { meetingId: r.meetingId, t0: Date.now(), live: useMic });
+      if (useMic && S.mic) {
+        S.graph = captureGraph(S.mic, S.tab);
+        S.archive = startArchive(S.graph.mixed, r.meetingId, () => Date.now() - S.t0);
+      }
       setIds(r.participants.map((p: { id?: string; speakerIdx: number }) => p.id ?? String(p.speakerIdx)));
       setPhase("live");
       if (useMic) {
         await listen().catch((e) => {
           S.live = false;
+          S.archive?.abort(), (S.archive = null);
           stopMic();
           setMode("typed");
           setWarn(`${e instanceof TranscriptionUnavailable ? `Live transcription is unavailable: ${e.message}` : `Couldn't start transcription: ${e}`}. You can type what's said instead.`);
@@ -201,27 +235,43 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   }
 
   async function end() {
-    setPhase("ending");
+    setLeaving(false);
     const S = s.current;
+    if (S.sent === 0 && !S.pending.length) return discard();
+    setEndingLabel("Saving the recording and writing your notes…");
+    setPhase("ending");
     S.live = false;
     await S.dg?.stop();
+    const saved = await S.archive?.stop();
     stopMic();
     setInterim("");
     try {
       while (S.busy) await new Promise((r) => setTimeout(r, 100));
       await flush(true);
-      if (S.sent === 0) throw new Error("nothing was said yet");
       await ingest({ op: "end", meetingId: S.meetingId, clockMs: Date.now() - S.t0 });
       for (let i = 0; i < 240; i++) {
         const st = await (await fetch(`/api/ingest?meetingId=${S.meetingId}`)).json();
         if (st.status === "ready" || st.status === "failed") break;
         await new Promise((r) => setTimeout(r, 500));
       }
-      router.push(`/meetings/${S.meetingId}`);
+      router.push(`/meetings/${S.meetingId}${saved?.lost ? "?audio=partial" : ""}`);
     } catch (e) {
       setWarn(`Couldn't finish: ${e instanceof Error ? e.message : e}`);
       setPhase("live");
     }
+  }
+
+  async function discard() {
+    setLeaving(false);
+    setEndingLabel("Discarding…");
+    setPhase("ending");
+    const S = s.current;
+    S.live = false;
+    S.archive?.abort();
+    await S.dg?.stop().catch(() => {});
+    stopMic();
+    if (S.meetingId) await ingest({ op: "discard", meetingId: S.meetingId }).catch(() => {});
+    router.push("/home");
   }
 
   const participants = speakers.map((name, i) => ({ id: ids[i] ?? `s${i}`, name, color: SPEAKER_COLORS[i % SPEAKER_COLORS.length]! }));
@@ -234,17 +284,19 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   return (
     <div className="grid h-dvh grid-rows-[auto_auto_1fr] lg:grid-cols-[1fr_320px] lg:grid-rows-[auto_1fr]">
       <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3 lg:col-span-2">
-        {phase === "setup" ? <Badge variant="secondary"><Mic />New recording</Badge> : <Badge className="gap-1.5 bg-red-600 text-white"><span className="size-1.5 animate-pulse rounded-full bg-white" />REC {clock(now)}</Badge>}
+        {phase === "setup" && <Button variant="ghost" size="icon" asChild><Link href="/home" aria-label="Back"><ArrowLeft /></Link></Button>}
+        {phase === "setup" ? <Badge variant="secondary"><Mic />New recording</Badge> : paused ? <Badge className="bg-amber-500 text-white"><Pause />PAUSED {clock(now)}</Badge> : <Badge className="gap-1.5 bg-red-600 text-white"><span className="size-1.5 animate-pulse rounded-full bg-white" />REC {clock(now)}</Badge>}
         {phase === "setup" ? <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-8 max-w-sm flex-1 font-semibold" /> : <h1 className="min-w-0 flex-1 truncate font-semibold">{title}</h1>}
-        {phase === "setup" && <Button onClick={start} disabled={!title.trim()}>{supported && mode === "mic" ? <><Mic />Record live microphone</> : <><Keyboard />Start (type lines)</>}</Button>}
+        {phase === "setup" && <Button onClick={start} disabled={!title.trim() || starting} aria-busy={starting}>{starting ? <InlineDots /> : supported && mode === "mic" ? <><Mic />Record live microphone</> : <><Keyboard />Start (type lines)</>}</Button>}
         {phase === "live" && (
           <>
             <Button variant="ghost" asChild><a href={`/meetings/${s.current.meetingId}`} target="_blank" rel="noreferrer"><Radio />Live view</a></Button>
             <Button variant="outline" onClick={() => addHighlight(s.current.meetingId, Date.now() - s.current.t0)}><Bookmark />Highlight</Button>
+            <Button variant="outline" onClick={togglePause}>{paused ? <><Play />Resume</> : <><Pause />Pause</>}</Button>
             <Button variant="destructive" onClick={end}><PhoneOff />End & get notes</Button>
+            <Button variant="ghost" size="icon" aria-label="Leave recording" onClick={() => setLeaving(true)}><X /></Button>
           </>
         )}
-        {phase === "ending" && <Button disabled><Loader2 className="animate-spin" />Writing notes…</Button>}
       </header>
 
       <div className="flex min-h-0 flex-col">
@@ -296,8 +348,8 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
         </div>
         {phase === "live" && mode === "typed" && (
           <form onSubmit={(e) => (e.preventDefault(), typed.trim() && (addTyped(typed), setTyped("")))} className="flex gap-2 border-t p-3">
-            <Input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={`${speakers[speaker]} says…`} />
-            <Button>Add</Button>
+            <Input autoFocus disabled={paused} value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={paused ? "Paused" : `${speakers[speaker]} says…`} />
+            <Button disabled={paused}>Add</Button>
           </form>
         )}
       </div>
@@ -306,6 +358,8 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
         <h2 className="mb-2 text-sm font-semibold">Agenda</h2>
         {event ? <div className="space-y-3"><Agenda text={event.agenda} /><Attachments eventId={event.id} items={event.attachments} /></div> : <p className="text-sm text-muted-foreground">Ad-hoc meeting. Start from a calendar event to see its agenda and files here.</p>}
       </aside>
+      <LeaveCallDialog open={leaving} onOpenChange={setLeaving} onEnd={end} onDiscard={discard} hasContent={lines.length > 0} />
+      {phase === "ending" && <OverlayLoading label={endingLabel} />}
     </div>
   );
 }

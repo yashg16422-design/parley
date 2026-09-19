@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { AvatarStack } from "@/components/person";
 import { RecordToggle } from "@/components/record-toggle";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import { Card } from "@/components/ui/card";
 import { fmtTime, relativeDay } from "@/lib/format";
 import { calendar, currentUser } from "@/queries";
@@ -29,7 +29,7 @@ export default async function CalendarPage() {
             <CalendarPlus className="size-8 text-primary" />
             <h2 className="font-semibold">Connect your calendar</h2>
             <p className="max-w-sm text-sm text-muted-foreground">See upcoming meetings with their agendas, files and join links, and record them in one click. (Simulated Google connection with sample events.)</p>
-            <form action={connectCalendar}><Button>Connect Google Calendar</Button></form>
+            <form action={connectCalendar}><SubmitButton>Connect Google Calendar</SubmitButton></form>
           </Card>
         )}
         {[...days].map(([day, list]) => (
