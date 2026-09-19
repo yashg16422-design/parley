@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { clock, fmtDay } from "@/lib/format";
 
 type Turn = { q: string; a?: AskResult; error?: string };
-const EXAMPLES = ["What did customers say about SSO?", "Which decisions did we make about the beta?", "What is Raj working on?", "What are the open risks for launch?"];
+const EXAMPLES = ["What did customers say about SSO?", "Which decisions did we make about the beta?", "What is Raj working on?", "What are the open risks for launch?", "What meetings do I have coming up this week?"];
 
 /** Answer text with [n] markers turned into links to the exact moment in the call. */
 function Answer({ a }: { a: AskResult }) {
@@ -21,7 +21,7 @@ function Answer({ a }: { a: AskResult }) {
         const c = byN.get(Number(part.match(/^\[(\d+)\]$/)?.[1]));
         if (!c) return <Fragment key={i}>{part}</Fragment>;
         return (
-          <Link key={i} href={c.href} title={`${c.title} · ${clock(c.startMs)}`} className="mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/10 px-1 align-text-top font-mono text-[11px] font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
+          <Link key={i} href={c.href} title={`${c.title} · ${c.kind === "event" ? "calendar" : clock(c.startMs)}`} className="mx-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/10 px-1 align-text-top font-mono text-[11px] font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground">
             {c.n}
           </Link>
         );
@@ -66,8 +66,8 @@ export function AskView({ initial }: { initial?: string }) {
         {!turns.length && (
           <div className="pt-10">
             <Sparkles className="size-6 text-primary" />
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em]">Ask anything about your meetings.</h2>
-            <p className="mt-2 max-w-prose text-sm text-muted-foreground">Answers come only from your transcripts, and every sentence links to the moment it was said.</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em]">Ask anything about your meetings and calendar.</h2>
+            <p className="mt-2 max-w-prose text-sm text-muted-foreground">Answers come only from your transcripts and calendar, and every sentence links to its source.</p>
             <div className="mt-6 flex flex-wrap gap-2">
               {EXAMPLES.map((e) => <button key={e} onClick={() => run(e)} className="rounded-lg border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground">{e}</button>)}
             </div>
@@ -91,8 +91,8 @@ export function AskView({ initial }: { initial?: string }) {
                           <Link href={c.href} className="flex gap-3 px-3 py-2 hover:bg-muted/50">
                             <span className="font-mono text-xs text-primary">{c.n}</span>
                             <span className="min-w-0 flex-1">
-                              <span className="block text-xs text-muted-foreground">{c.title}{c.startedAt ? ` · ${fmtDay(new Date(c.startedAt))}` : ""} · {clock(c.startMs)}</span>
-                              <span className="block"><b className="font-medium">{c.speakerName}:</b> {c.text}</span>
+                              <span className="block text-xs text-muted-foreground">{c.title}{c.startedAt ? ` · ${fmtDay(new Date(c.startedAt))}` : ""} · {c.kind === "event" ? "calendar" : clock(c.startMs)}</span>
+                              <span className="block">{c.kind === "event" ? c.text : <><b className="font-medium">{c.speakerName}:</b> {c.text}</>}</span>
                             </span>
                           </Link>
                         </li>
@@ -107,7 +107,7 @@ export function AskView({ initial }: { initial?: string }) {
         <div ref={bottom} />
       </div>
       <form onSubmit={(e) => (e.preventDefault(), run(q))} className="sticky bottom-0 flex gap-2 border-t bg-background py-4">
-        <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about any meeting…" maxLength={500} className="h-11" />
+        <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about any meeting or what’s coming up…" maxLength={500} className="h-11" />
         <Button size="icon" className="size-11" disabled={busy || q.trim().length < 3} aria-label="Ask"><ArrowUp /></Button>
       </form>
     </div>

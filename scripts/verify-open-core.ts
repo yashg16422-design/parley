@@ -18,7 +18,7 @@ import { deleteKey, resolveKey, saveKey } from "../src/keys";
 import { poolClient, providersFor, toAnthropic } from "../src/ai/providers";
 import { takeToken } from "../src/rate-limit";
 import { sweep } from "../src/sweep";
-import { briefingBlocks, slackWebhook } from "../src/notify/slack";
+import { briefingBlocks, sendMeetingBriefing, slackWebhook } from "../src/notify/slack";
 import { templates } from "../seed/src/templates";
 import { upsertGoogleUser } from "../src/google-auth";
 import { deliverMeeting, hubspotNoteHtml, notionPage } from "../src/notify/integrations";
@@ -292,9 +292,17 @@ async function main() {
   const slack = JSON.stringify(posted[0]!.body);
   assert.ok(slack.includes("Went quiet after talking") && /release notes by Thursday[^"]*— \*Maya Chen\*/.test(slack) && slack.includes("*Talk time*") && slack.includes("https://parley.example/meetings/"), slack.slice(0, 400));
   assert.deepEqual([slackWebhook("https://evil.example/hook"), slackWebhook("http://hooks.slack.com/x"), slackWebhook("not a url")], [null, null, null], "only https Slack hosts");
+  // The server webhook is the operator's channel: visitors' and accounts' meetings never post there.
+  const stubPost = (async () => new Response("ok")) as unknown as typeof fetch;
+  for (const kind of ["guest", "account"] as const) {
+    await db.update(s.users).set({ kind }).where(eq(s.users.id, maya!.id));
+    assert.deepEqual(await sendMeetingBriefing(db, talked.id, stubPost), { sent: false, reason: "no Slack webhook" }, `${kind} meeting kept out of the server channel`);
+  }
+  await db.update(s.users).set({ kind: "demo" }).where(eq(s.users.id, maya!.id));
+  assert.deepEqual(await sendMeetingBriefing(db, talked.id, stubPost), { sent: true }, "demo still posts to the server channel");
   const big = briefingBlocks({ id: "x", ownerId: "x", emails: [], title: "T".repeat(300), startedAt: null, durationMs: 1, platform: "zoom", overview: "<script>&", agenda: null, talk: [], actions: Array.from({ length: 40 }, (_, i) => ({ text: `item ${i} ${"x".repeat(200)}`, owner: null, due: null, verified: true })) });
   assert.ok(big.blocks.every((b) => !("text" in b) || (b.text as { text: string }).text.length <= 3000) && (big.blocks[0] as { text: { text: string } }).text.text.length <= 150 && JSON.stringify(big).includes("&lt;script&gt;&amp;") && JSON.stringify(big).includes("25 more"), "Slack limits + escaping");
-  console.log("✓ Slack briefing: sent once when notes are ready (title, talk-time bars, action items with owners, deep link); non-Slack hosts refused; 150/3000-char limits and escaping held");
+  console.log("✓ Slack briefing: sent once when notes are ready (title, talk-time bars, action items with owners, deep link); non-Slack hosts refused; server channel is demo-only (guest/account meetings skipped); 150/3000-char limits and escaping held");
   console.log(`✓ sweeper: stale call with lines → ended + notes, silent call → abandoned, live call untouched; dead worker → requeued + drained, out of retries → meeting failed; idempotent (${report.ms}ms)`);
 
   // Integrations: Notion page + HubSpot note payloads, delivered with the owner's own tokens, every attempt audited.

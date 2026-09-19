@@ -65,6 +65,6 @@ export async function apiAsk(userId: string, question: string) {
   const a = await ask(db, userId, question, await llmForUser(db, userId));
   return {
     answer: a.answer, source: a.source, model: a.model,
-    citations: a.citations.map((c) => ({ n: c.n, meeting: c.title, meetingId: c.meetingId, startMs: c.startMs, speaker: c.speakerName, text: c.text, url: `${base()}${c.href}` })),
+    citations: a.citations.map((c) => ({ n: c.n, kind: c.kind ?? "transcript", meeting: c.title, meetingId: c.meetingId, startMs: c.startMs, speaker: c.speakerName, text: c.text, url: `${base()}${c.href}` })),
   };
 }

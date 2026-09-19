@@ -25,6 +25,8 @@ export type Briefing = {
   talk: { name: string; talkMs: number }[];
   actions: { text: string; owner: string | null; due: string | null; verified: boolean }[];
   ownerId: string;
+  /** Only the shared demo workspace may use the server's SLACK_WEBHOOK_URL. */
+  ownerKind?: "demo" | "guest" | "account";
   /** Other attendees' emails (participants + calendar invitees), for CRM matching. */
   emails: string[];
 };
@@ -71,7 +73,7 @@ export async function loadBriefing(db: Database, meetingId: string): Promise<Bri
     where: eq(s.meetings.id, meetingId),
     with: {
       participants: { columns: { name: true, talkMs: true, email: true }, orderBy: asc(s.meetingParticipants.speakerIdx) },
-      owner: { columns: { email: true } },
+      owner: { columns: { email: true, kind: true } },
       actionItems: { orderBy: asc(s.actionItems.sortOrder), with: { assignee: { columns: { name: true } } } },
       knowledge: { columns: { knowledge: true } },
       calendarEvent: { columns: { agenda: true, attendees: true } },
@@ -83,7 +85,7 @@ export async function loadBriefing(db: Database, meetingId: string): Promise<Bri
     overview: m.knowledge?.knowledge.overview ?? null, agenda: m.calendarEvent?.agenda ?? null,
     talk: m.participants.filter((p) => p.talkMs > 0).map((p) => ({ name: p.name, talkMs: p.talkMs })),
     actions: m.actionItems.map((a) => ({ text: a.text, owner: a.assignee?.name ?? a.assigneeName, due: a.dueText, verified: a.verified })),
-    ownerId: m.ownerId,
+    ownerId: m.ownerId, ownerKind: m.owner?.kind,
     emails: [...new Set([...m.participants.map((p) => p.email), ...(m.calendarEvent?.attendees ?? []).map((a) => a.email)]
       .filter((e): e is string => !!e).map((e) => e.toLowerCase()).filter((e) => e !== m.owner?.email?.toLowerCase()))],
   };
@@ -94,8 +96,10 @@ export async function sendMeetingBriefing(db: Database, meetingId: string, fetch
   try {
     const b = preloaded ?? (await loadBriefing(db, meetingId));
     if (!b) return { sent: false as const, reason: "meeting not found" };
-    // The owner's own webhook (Settings) wins over the server's SLACK_WEBHOOK_URL.
-    const url = slackWebhook((await resolveKey(db, b.ownerId, "slack"))?.key);
+    // The owner's own webhook (Settings) wins. The server's SLACK_WEBHOOK_URL is the operator's
+    // channel, so only the shared demo posts there: a visitor's meeting must never land in it.
+    const hook = await resolveKey(db, b.ownerId, "slack");
+    const url = hook && (hook.source === "tenant" || b.ownerKind === "demo") ? slackWebhook(hook.key) : null;
     if (!url) return { sent: false as const, reason: "no Slack webhook" };
     const r = await fetcher(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(briefingBlocks(b)), signal: AbortSignal.timeout(8_000) });
     if (!r.ok) throw new Error(`Slack ${r.status}: ${(await r.text()).slice(0, 200)}`);

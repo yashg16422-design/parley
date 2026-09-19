@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db";
-import { searchTranscripts, SYNONYMS } from "../search";
+import { searchEvents, searchTranscripts, SYNONYMS } from "../search";
 import { completeJson, type LlmClient } from "./llm";
 
 /**
- * Ask Parley: a question across every meeting the user can see.
+ * Ask Parley: a question across every meeting the user can see, plus their calendar.
  *  1. retrieve: keywords → the synonym-expanding (ts_rewrite) transcript search, OR-joined so a
  *     natural-language question still matches; capped per meeting for variety
  *  2. context: each hit plus its neighbouring lines, numbered as evidence [1]..[n]
@@ -17,6 +17,8 @@ const MAX_EVIDENCE = 20;
 const PER_MEETING = 5;
 
 export type Evidence = {
+  /** Transcript lines by default; "event" = a calendar entry (schedule, not speech). */
+  kind?: "event";
   n: number; meetingId: string; title: string; startedAt: Date | null;
   seq: number; startMs: number; speakerName: string; text: string; before: string | null; after: string | null;
 };
@@ -88,11 +90,14 @@ export async function gatherEvidence(db: Database, userId: string, question: str
 const clock = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "undated");
 
-export function askPrompt(question: string, ev: Evidence[]) {
-  const block = ev.map((e) => `[${e.n}] "${e.title}" (${day(e.startedAt)}) at ${clock(e.startMs)}\n${e.before ? `   (before) ${e.before}\n` : ""}   ${e.speakerName}: ${e.text}\n${e.after ? `   (after) ${e.after}\n` : ""}`).join("\n");
+export function askPrompt(question: string, ev: Evidence[], today?: string) {
+  const block = ev.map((e) => e.kind === "event"
+    ? `[${e.n}] (calendar) "${e.title}"\n   ${e.text}\n`
+    : `[${e.n}] "${e.title}" (${day(e.startedAt)}) at ${clock(e.startMs)}\n${e.before ? `   (before) ${e.before}\n` : ""}   ${e.speakerName}: ${e.text}\n${e.after ? `   (after) ${e.after}\n` : ""}`).join("\n");
+  const cal = ev.some((e) => e.kind === "event") ? " Evidence marked (calendar) is the user's schedule (planned meetings, attendees, agendas), not something anyone said: use it for when/who/what's-next questions." : "";
   return [
-    { role: "system" as const, content: "You answer questions about the user's own recorded meetings. Use ONLY the numbered evidence. Put citations like [2] or [1][4] at the end of every sentence, pointing at the evidence that supports it. Name who said what and in which meeting when it matters. If the evidence doesn't answer the question, say so plainly in one sentence with no citation. Be concise: at most 6 sentences. Reply with JSON only: {\"answer\": string}." },
-    { role: "user" as const, content: `Question: ${question}\n\nEvidence:\n${block}` },
+    { role: "system" as const, content: "You answer questions about the user's own recorded meetings and calendar. Use ONLY the numbered evidence. Put citations like [2] or [1][4] at the end of every sentence, pointing at the evidence that supports it. Name who said what and in which meeting when it matters. If the evidence doesn't answer the question, say so plainly in one sentence with no citation. Be concise: at most 6 sentences. Reply with JSON only: {\"answer\": string}." + cal },
+    { role: "user" as const, content: `${today ? `Today is ${today}.\n` : ""}Question: ${question}\n\nEvidence:\n${block}` },
   ];
 }
 
@@ -117,18 +122,56 @@ export function groundAnswer(answer: string, ev: Evidence[]) {
   return { answer: kept.join(" ") || NOT_FOUND, used, dropped };
 }
 
-export async function ask(db: Database, userId: string, question: string, llm: LlmClient | null): Promise<AskResult> {
-  const ev = await gatherEvidence(db, userId, question);
-  const link = (e: Evidence) => ({ ...e, href: `/meetings/${e.meetingId}?t=${e.startMs}#line-${e.seq}` });
+/** Questions about the schedule ("what's next", "who's in Thursday's call") get the nearby calendar, not just keyword matches. */
+const CALENDARISH = /\b(calendar|schedule[ds]?|upcoming|next|today|tonight|tomorrow|yesterday|(this|next|last) week|mon|tue|wed|thu|fri|sat|sun)(day|sday|nesday|rsday|urday)?\b|\b(when|agenda|invite[ds]?|invitees?|attend(ees?|ing)?|booked|busy|free)\b/i;
+const MAX_EVENTS = 12;
+
+function fmtWhen(start: Date, end: Date, tz: string) {
+  const f = (d: Date, o: Intl.DateTimeFormatOptions) => { try { return d.toLocaleString("en-US", { ...o, timeZone: tz }); } catch { return d.toLocaleString("en-US", { ...o, timeZone: "UTC" }); } };
+  return `${f(start, { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}–${f(end, { hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`;
+}
+
+/** Calendar entries relevant to a question: keyword matches (titles, agendas, attachments) plus, for schedule questions, the past week and next two. */
+export async function gatherEvents(db: Database, userId: string, question: string, firstN: number, tz = "UTC", now = new Date()): Promise<Evidence[]> {
+  const matched = (await Promise.all(retrievalQuery(question).map((q) => searchEvents(db, q, userId, 5)))).flat().map((e) => e.id);
+  const around = CALENDARISH.test(question)
+    ? rows<{ id: string }>(await db.execute(sql`SELECT id FROM calendar_events WHERE user_id = ${userId}
+        AND starts_at BETWEEN ${new Date(now.getTime() - 7 * 86_400_000)} AND ${new Date(now.getTime() + 14 * 86_400_000)} ORDER BY starts_at LIMIT 20`)).map((r) => r.id)
+    : [];
+  const ids = [...new Set([...matched, ...around])].slice(0, MAX_EVENTS);
+  if (!ids.length) return [];
+  const events = rows<{ id: string; title: string; starts_at: string; ends_at: string; platform: string; attendees: { name?: string; email: string }[]; agenda: string | null; meeting_id: string | null }>(await db.execute(sql`
+    SELECT e.id, e.title, e.starts_at, e.ends_at, e.platform, e.attendees, e.agenda, m.id AS meeting_id
+    FROM calendar_events e LEFT JOIN meetings m ON m.calendar_event_id = e.id
+    WHERE e.user_id = ${userId} AND e.id IN (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)}) ORDER BY e.starts_at`));
+  const PLATFORM: Record<string, string> = { zoom: "Zoom", google_meet: "Google Meet", teams: "Teams" };
+  return events.map((e, i) => {
+    const start = new Date(e.starts_at);
+    const who = (e.attendees ?? []).map((a) => a.name || a.email).slice(0, 12).join(", ");
+    return {
+      kind: "event" as const, n: firstN + i, meetingId: e.meeting_id ?? "", title: e.title, startedAt: start, seq: 0, startMs: 0, speakerName: "Calendar",
+      text: [fmtWhen(start, new Date(e.ends_at), tz), PLATFORM[e.platform] ?? e.platform, who && `with ${who}`, e.agenda && `Agenda: ${e.agenda.replace(/\s+/g, " ").slice(0, 400)}`, start < now ? (e.meeting_id ? "recorded" : "past, not recorded") : "upcoming"].filter(Boolean).join(" · "),
+      before: null, after: null,
+    };
+  });
+}
+
+export async function ask(db: Database, userId: string, question: string, llm: LlmClient | null, now = new Date()): Promise<AskResult> {
+  const tz = rows<{ timezone: string }>(await db.execute(sql`SELECT timezone FROM users WHERE id = ${userId}`))[0]?.timezone ?? "UTC";
+  const said = await gatherEvidence(db, userId, question);
+  const ev = [...said, ...(await gatherEvents(db, userId, question, said.length + 1, tz, now))];
+  const link = (e: Evidence) => ({ ...e, href: e.kind === "event" ? (e.meetingId ? `/meetings/${e.meetingId}` : "/calendar") : `/meetings/${e.meetingId}?t=${e.startMs}#line-${e.seq}` });
   if (!ev.length) return { answer: NOT_FOUND, citations: [], source: "none", model: null, dropped: 0 };
   if (!llm) {
-    const top = ev.slice(0, 4);
+    const top = [...said.slice(0, 4), ...ev.filter((e) => e.kind === "event").slice(0, said.length ? 2 : 4)];
     return {
-      answer: `No AI model is connected, so here is what was said: ${top.map((e) => `${e.speakerName} in "${e.title}": “${e.text}” [${e.n}]`).join(" ")}`,
+      answer: `No AI model is connected, so here is what was found: ${top.map((e) => (e.kind === "event" ? `"${e.title}" on your calendar: ${e.text} [${e.n}]` : `${e.speakerName} in "${e.title}": “${e.text}” [${e.n}]`)).join(" ")}`,
       citations: top.map(link), source: "quotes", model: null, dropped: 0,
     };
   }
-  const { answer: raw } = await completeJson(llm, askPrompt(question, ev), z.object({ answer: z.string().min(1).max(4000) }), { maxTokens: 800 });
+  let today: string;
+  try { today = now.toLocaleString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz, timeZoneName: "short" }); } catch { today = now.toUTCString(); }
+  const { answer: raw } = await completeJson(llm, askPrompt(question, ev, today), z.object({ answer: z.string().min(1).max(4000) }), { maxTokens: 800 });
   const g = groundAnswer(raw, ev);
   return { answer: g.answer, citations: ev.filter((e) => g.used.has(e.n)).map(link), source: "ai", model: llm.model, dropped: g.dropped };
 }

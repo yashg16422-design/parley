@@ -25,7 +25,7 @@ const TOOLS = [
   },
   {
     name: "ask_parley", title: "Ask Parley",
-    description: "Answer a question using only the user's meeting transcripts. The answer cites numbered sources with links; uncited claims are removed.",
+    description: "Answer a question using only the user's meeting transcripts and calendar (upcoming meetings, attendees, agendas). The answer cites numbered sources with links; uncited claims are removed.",
     inputSchema: { type: "object", properties: { question: { type: "string" } }, required: ["question"] },
     args: z.object({ question: z.string().min(3).max(500) }),
     run: (uid: string, a: { question: string }) => apiAsk(uid, a.question),

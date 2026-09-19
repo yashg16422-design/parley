@@ -15,7 +15,7 @@ import { modelChunkNotes } from "../src/ai/ground";
 import { extractJson, type LlmClient } from "../src/ai/llm";
 import { processMeeting, processWindows, versionFor } from "../src/ai/pipeline";
 import { resolveSummary } from "../src/summaries";
-import { ask, gatherEvidence, groundAnswer, keywords, retrievalQuery } from "../src/ai/ask";
+import { ask, gatherEvents, gatherEvidence, groundAnswer, keywords, retrievalQuery } from "../src/ai/ask";
 import { liveInsights } from "../src/live-insights";
 import { drainMeeting } from "../src/jobs";
 import { closedWindows, planWindows, type Seg } from "../src/ai/windows";
@@ -213,7 +213,21 @@ async function main() {
   assert.ok(quotes.source === "quotes" && quotes.citations.length > 0 && /\[1\]/.test(quotes.answer));
   assert.equal((await ask(db, askUser, "zebra xylophone quokka", fakeAsk)).source, "none");
   assert.equal((await gatherEvidence(db, stableId("user:nobody"), "SSO")).length, 0, "other workspaces see nothing");
-  console.log(`✓ Ask Parley: ${ev.length} evidence lines from ${new Set(ev.map((e) => e.meetingId)).size} meetings via synonyms; invalid/uncited sentences dropped; ?t= deep links; quote fallback without a model; scoped per user`);
+  // Calendar questions: nearby events join the evidence (after transcript lines, so their numbers don't shift).
+  const upcoming = await gatherEvents(db, askUser, "What meetings do I have coming up this week?", 1, "America/New_York");
+  assert.ok(upcoming.length > 0 && upcoming.every((e, i) => e.kind === "event" && e.n === i + 1 && /upcoming|recorded|past/.test(e.text)), `calendar window (${upcoming.length})`);
+  assert.equal((await gatherEvents(db, askUser, "zebra xylophone quokka", 1)).length, 0, "no calendar noise for unrelated questions");
+  assert.equal((await gatherEvents(db, stableId("user:nobody"), "What's on my calendar this week?", 1)).length, 0, "other workspaces' calendars stay private");
+  const calFake = { model: "fake-cal", config: "fake", complete: async (m: { role: string; content: string }[]) => {
+    const u = m.find((x) => x.role === "user")!.content;
+    assert.ok(/^Today is /.test(u) && /calendar/.test(m[0]!.content), "prompt carries today's date and calendar guidance");
+    return JSON.stringify({ answer: `Next up is on your calendar [${/\[(\d+)\] \(calendar\)/.exec(u)![1]}].` });
+  } };
+  const cal = await ask(db, askUser, "What meetings do I have coming up this week?", calFake);
+  assert.ok(cal.source === "ai" && cal.citations.length === 1 && cal.citations[0]!.kind === "event" && /^\/(calendar|meetings\/[\w-]+)$/.test(cal.citations[0]!.href), JSON.stringify(cal.citations));
+  const calQuotes = await ask(db, askUser, "What's on my calendar this week?", null);
+  assert.ok(calQuotes.source === "quotes" && calQuotes.citations.some((c) => c.kind === "event"));
+  console.log(`✓ Ask Parley: ${ev.length} evidence lines from ${new Set(ev.map((e) => e.meetingId)).size} meetings via synonyms; invalid/uncited sentences dropped; ?t= deep links; quote fallback without a model; scoped per user; calendar questions cite events (${upcoming.length} this fortnight)`);
 
   // Live insights: AI notes for processed windows, rules for the rest.
   const li = await liveInsights(db, heroId);
