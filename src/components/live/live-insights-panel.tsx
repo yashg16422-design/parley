@@ -36,7 +36,7 @@ export function LiveInsightsPanel({ meetingId, lineCount }: { meetingId: string 
         <h2 className="text-sm font-semibold">Live notes</h2>
         {data && (
           <span className="ml-auto text-[11px] text-muted-foreground">
-            {data.source === "rules" ? "Rule-based · add a model for AI" : `AI through ${clock(data.aiUntilMs)}${data.source === "mixed" ? " + live" : ""}`}
+            {data.source === "rules" ? (data.hasModel ? "AI notes arriving · rule-based for now" : "Rule-based · add a model for AI") : `AI through ${clock(data.aiUntilMs)}${data.source === "mixed" ? " + live" : ""}`}
           </span>
         )}
       </div>

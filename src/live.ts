@@ -44,6 +44,13 @@ export type IngestInput = z.infer<typeof ingestSchema>;
 
 /** Slack for network jitter when checking the replay clock against wall time. */
 const CLOCK_SLACK_MS = 5_000;
+/**
+ * Requests reach the server unevenly (a slow one, then a fast one), so the
+ * wall time between them can undercount the client's by a few seconds. That
+ * jitter is wall time, so it scales with speed: at 60x, 3s of jitter is 3 min
+ * of meeting clock. A clock that runs away still fails.
+ */
+const WALL_JITTER_MS = 3_000;
 
 /** Only the meeting's owner may write to it; anyone else gets the same 404 as a missing meeting. */
 async function liveMeeting(db: Database, id: string, ownerId: string) {
@@ -115,7 +122,7 @@ export async function appendLines(db: Database, ownerId: string, input: Extract<
   const m = await liveMeeting(db, input.meetingId, ownerId);
   const prevClock = m.liveClockMs ?? 0;
   const elapsed = now.getTime() - (m.liveUpdatedAt ?? m.startedAt ?? now).getTime();
-  const allowed = elapsed * Math.max(input.speed, m.liveSpeed ?? 1) + CLOCK_SLACK_MS;
+  const allowed = (elapsed + WALL_JITTER_MS) * Math.max(input.speed, m.liveSpeed ?? 1) + CLOCK_SLACK_MS;
   if (input.clockMs < prevClock) throw new HttpError(409, "clock went backwards");
   if (input.clockMs - prevClock > allowed) throw new HttpError(429, `clock advanced ${input.clockMs - prevClock}ms in ${elapsed}ms of wall time; faster than ${input.speed}x`);
   if (input.lines.some((l, i) => l.endMs < l.startMs || l.endMs > input.clockMs + CLOCK_SLACK_MS || (i > 0 && l.startMs < input.lines[i - 1]!.startMs))) {

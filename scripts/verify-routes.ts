@@ -143,8 +143,10 @@ async function openCore(mayasMeeting: string) {
   const askIt = (question: string, uid: string | null = MAYA) => fetch(`${BASE}/api/ai/ask`, { method: "POST", headers: { "content-type": "application/json", ...(uid ? { cookie: `parley_uid=${sess(uid)}` } : {}) }, body: JSON.stringify({ question }) });
   assert.equal((await askIt("What about SSO?", null)).status, 401);
   assert.equal((await askIt("x")).status, 400);
-  const answer = (await (await askIt("What did customers say about single sign-on?")).json()) as { source: string; citations: { href: string }[] };
-  assert.ok(answer.source === "quotes" && answer.citations.length > 0 && answer.citations.every((c) => /^\/meetings\/[0-9a-f-]{36}\?t=\d+#line-\d+$/.test(c.href)), JSON.stringify(answer).slice(0, 300));
+  const answer = (await (await askIt("What did customers say about single sign-on?")).json()) as { source: string; citations: { href: string; kind?: string }[] };
+  // Transcript lines deep-link to the moment; calendar events link to their meeting or the calendar.
+  const linked = (c: { href: string; kind?: string }) => (c.kind === "event" ? /^\/(calendar|meetings\/[0-9a-f-]{36})$/ : /^\/meetings\/[0-9a-f-]{36}\?t=\d+#line-\d+$/).test(c.href);
+  assert.ok(answer.source === "quotes" && answer.citations.some((c) => c.kind !== "event") && answer.citations.every(linked), JSON.stringify(answer).slice(0, 300));
   const notes = await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${sess(MAYA)}` } });
   const insight = (await notes.json()) as { source: string; actions: { text: string }[]; lines: number };
   assert.ok(notes.status === 200 && insight.lines === 4 && insight.actions.some((x) => /send the update to leadership/.test(x.text)), JSON.stringify(insight).slice(0, 300));

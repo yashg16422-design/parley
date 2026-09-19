@@ -392,6 +392,21 @@ export const chunkNotes = pgTable(
   (t) => [uniqueIndex("chunk_notes_meeting_version_idx_uq").on(t.meetingId, t.promptVersion, t.chunkIdx)],
 );
 
+/**
+ * AI notes for the still-open end of a live call (after the last closed
+ * ~10-minute window), refreshed every ~30s while the call runs. Superseded by
+ * chunk_notes and the final pipeline; one row per meeting.
+ */
+export const liveTailNotes = pgTable("live_tail_notes", {
+  meetingId: uuid("meeting_id").primaryKey().references(() => meetings.id, { onDelete: "cascade" }),
+  firstSeq: integer("first_seq").notNull().default(0),
+  lastSeq: integer("last_seq").notNull().default(-1),
+  notes: jsonb("notes").$type<ChunkNotes>(),
+  model: text("model"),
+  /** When the last refresh was claimed; a new one waits 30s (also stops two instances running at once). */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Stage 2: canonical merged facts. 1:1 with a meeting. */
 export const meetingKnowledge = pgTable("meeting_knowledge", {
   meetingId: uuid("meeting_id")

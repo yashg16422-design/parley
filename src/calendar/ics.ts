@@ -144,13 +144,13 @@ export function parseFeed(ics: string, from: Date, to: Date) {
 }
 
 /** Save (sealed) and sync a user's feed. One iCal connection per user; reconnecting replaces the address. */
-export async function connectIcs(db: Database, userId: string, rawUrl: string, fetcher?: Fetcher) {
+export async function connectIcs(db: Database, userId: string, rawUrl: string, fetcher?: Fetcher, now = new Date()) {
   const u = checkFeedUrl(rawUrl);
   await db
     .insert(s.calendarConnections)
     .values({ userId, provider: "ics", accountEmail: `iCal feed · ${u.hostname}`, feedUrlSecret: seal(u.href), status: "syncing" })
     .onConflictDoUpdate({ target: [s.calendarConnections.userId, s.calendarConnections.provider], set: { feedUrlSecret: seal(u.href), accountEmail: `iCal feed · ${u.hostname}`, status: "syncing" } });
-  return syncIcs(db, userId, fetcher);
+  return syncIcs(db, userId, fetcher, now);
 }
 
 export async function syncIcs(db: Database, userId: string, fetcher?: Fetcher, now = new Date()) {

@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { modelChunkNotes } from "../src/ai/ground";
@@ -16,7 +16,7 @@ import { extractJson, type LlmClient } from "../src/ai/llm";
 import { processMeeting, processWindows, versionFor } from "../src/ai/pipeline";
 import { resolveSummary } from "../src/summaries";
 import { ask, gatherEvents, gatherEvidence, groundAnswer, keywords, retrievalQuery } from "../src/ai/ask";
-import { liveInsights } from "../src/live-insights";
+import { liveInsights, refreshLiveTail } from "../src/live-insights";
 import { drainMeeting } from "../src/jobs";
 import { closedWindows, planWindows, type Seg } from "../src/ai/windows";
 import * as s from "../src/db/schema";
@@ -236,7 +236,22 @@ async function main() {
   await db.delete(s.chunkNotes).where(eq(s.chunkNotes.meetingId, plain!.id));
   const rules = await liveInsights(db, plain!.id);
   assert.ok(rules.source === "rules" && rules.lines > 0 && [...rules.decisions, ...rules.actions, ...rules.questions].every((x) => x.by === "rules"));
-  console.log(`✓ live notes: ${li.aiWindows} AI windows → ${li.actions.length} actions, ${li.decisions.length} decisions, ${li.questions.length} questions; no windows → rule-based (${rules.actions.length} actions)`);
+  // A live call with no closed window yet: its open end gets AI notes (throttled to ~30s); rules only cover newer lines.
+  await db.update(s.meetings).set({ status: "live" }).where(eq(s.meetings.id, plain!.id));
+  const tailLlm = fakeModel();
+  assert.equal(await refreshLiveTail(db, plain!.id, tailLlm), "refreshed");
+  assert.equal(await refreshLiveTail(db, plain!.id, tailLlm), "up to date", "no new lines → no model call");
+  const tailLi = await liveInsights(db, plain!.id);
+  assert.ok(tailLi.source === "ai" && tailLi.actions.length > 0 && tailLi.actions.every((x) => x.by === "ai") && tailLi.aiUntilMs > 0, JSON.stringify(tailLi.actions));
+  const lastSeg = (await db.select().from(s.transcriptSegments).where(eq(s.transcriptSegments.meetingId, plain!.id)).orderBy(desc(s.transcriptSegments.seq)).limit(1))[0]!;
+  await db.insert(s.transcriptSegments).values({ ...lastSeg, seq: lastSeg.seq + 1, startMs: lastSeg.endMs + 500, endMs: lastSeg.endMs + 3000, text: "I'll send the revised contract by Friday." });
+  const callsBefore = tailLlm.calls;
+  assert.equal(await refreshLiveTail(db, plain!.id, tailLlm), "refreshed recently", "a new line within 30s waits");
+  const mixed = await liveInsights(db, plain!.id);
+  assert.ok(tailLlm.calls === callsBefore && mixed.source === "mixed" && mixed.actions.some((x) => x.by === "rules" && x.seq === lastSeg.seq + 1), "newest line rule-based until the next refresh");
+  await db.update(s.meetings).set({ status: "ready" }).where(eq(s.meetings.id, plain!.id));
+  assert.equal(await refreshLiveTail(db, plain!.id, tailLlm), "not live", "ended calls are left to the final pipeline");
+  console.log(`✓ live notes: ${li.aiWindows} AI windows → ${li.actions.length} actions, ${li.decisions.length} decisions, ${li.questions.length} questions; no windows → rule-based (${rules.actions.length} actions); live open end → AI every 30s, newest lines rule-based`);
 
   // Summary cache key includes the model config: switching models re-renders instead of serving stale output.
   const [cfgA, cfgB] = [{ ...fakeModel(), config: "hf|model-a" }, { ...fakeModel(), config: "hf|model-b" }];

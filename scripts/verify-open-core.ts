@@ -201,7 +201,7 @@ async function main() {
   console.log("✓ feed fetch: https + host allowlist (incl. redirects), 5 MB cap, must be iCal, 404 → 'address reset'");
 
   // Sync into the events schema: sealed address, idempotent upserts, removals, error state.
-  const first = await connectIcs(db, maya!.id, FEED, okFeed(ics()));
+  const first = await connectIcs(db, maya!.id, FEED, okFeed(ics()), NOW);
   const conn = await db.query.calendarConnections.findFirst({ where: and(eq(s.calendarConnections.userId, maya!.id), eq(s.calendarConnections.provider, "ics")) });
   assert.ok(conn!.feedUrlSecret && !conn!.feedUrlSecret.includes("private-abc123") && open(conn!.feedUrlSecret) === FEED, "feed address stored sealed");
   const again = await syncIcs(db, maya!.id, okFeed(ics()), NOW);
