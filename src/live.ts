@@ -24,6 +24,8 @@ export const ingestSchema = z.discriminatedUnion("op", [
     title: z.string().trim().min(1).max(160),
     participants: z.array(z.string().trim().min(1).max(60)).min(1).max(8),
     calendarEventId: z.uuid().optional(),
+    /** Pasted join link's platform, for ad-hoc calls without a calendar event. */
+    platform: z.enum(["zoom", "google_meet", "teams"]).optional(),
   }),
   z.object({
     op: z.literal("append"),
@@ -89,7 +91,7 @@ export async function startMic(db: Database, owner: { id: string; name: string; 
     const [m] = await tx
       .insert(s.meetings)
       .values({
-        ownerId: owner.id, title: input.title, platform: event?.platform ?? "google_meet", status: "live", startedAt: new Date(),
+        ownerId: owner.id, title: input.title, platform: event?.platform ?? input.platform ?? "google_meet", status: "live", startedAt: new Date(),
         calendarEventId: event && !event.meeting ? event.id : null, liveClockMs: 0, liveSpeed: 1, liveUpdatedAt: new Date(),
       })
       .returning({ id: s.meetings.id });

@@ -3,6 +3,7 @@ import { and, eq, gte, lte, notInArray, sql } from "drizzle-orm";
 import type { Database } from "../db";
 import * as s from "../db/schema";
 import type { Attendee } from "../db/json-types";
+import { findMeetingLink, type Platform } from "../lib/meeting-links";
 import { open, seal } from "../vault";
 
 /**
@@ -13,13 +14,6 @@ import { open, seal } from "../vault";
 const HOSTS = [/^calendar\.google\.com$/, /^outlook\.office365\.com$/, /^outlook\.live\.com$/, /^p\d+-caldav\.icloud\.com$/];
 const MAX_BYTES = 5 * 1024 * 1024;
 const WINDOW = { pastDays: 7, futureDays: 30 };
-type Platform = (typeof s.meetingPlatform.enumValues)[number];
-const LINKS: [Platform, RegExp][] = [
-  ["google_meet", /https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i],
-  ["zoom", /https:\/\/[\w.-]*zoom\.us\/(?:j|my|w)\/[^\s"<>)\\]+/i],
-  ["teams", /https:\/\/teams\.(?:microsoft|live)\.com\/(?:l\/meetup-join|meet)\/[^\s"<>)\\]+/i],
-];
-
 const sqlExcluded = (col: string) => sql.raw(`excluded.${col}`);
 
 export class FeedError extends Error {
@@ -87,7 +81,7 @@ function cleanAgenda(raw: string) {
 function details(ev: ICAL.Event) {
   const c = ev.component;
   const hay = [c.getFirstPropertyValue("x-google-conference"), ev.location, c.getFirstPropertyValue("url"), ev.description].map(text).join("\n");
-  const link = LINKS.map(([platform, re]) => ({ platform, url: hay.match(re)?.[0] })).find((l) => l.url);
+  const link = findMeetingLink(hay);
   const organizer = text(ev.organizer).replace(/^mailto:/i, "").toLowerCase();
   const attendees = ev.attendees.slice(0, 50).flatMap((p): Attendee[] => {
     const email = text(p.getFirstValue()).replace(/^mailto:/i, "").toLowerCase();

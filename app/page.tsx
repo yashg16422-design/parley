@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Database, Mic, Waves } from "lucide-react";
+import { ArrowRight, Database, Link2, Mic, Waves } from "lucide-react";
+import { JoinByLink } from "@/components/join-by-link";
 import { enterDemo, startFresh } from "@app/actions/workspace";
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
       </div>
       <p className="mb-8 max-w-md text-center text-muted-foreground">AI meeting notes: record, summarize, search and share your calls.</p>
       {limited && <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">Too many new workspaces from this network. Try again in an hour, or use the demo workspace.</p>}
-      <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
+      <div className="grid w-full max-w-5xl gap-4 md:grid-cols-3">
         <Card className="gap-4 p-6">
           <Database className="size-6 text-primary" />
           <div>
@@ -36,6 +37,14 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
             <Input name="name" placeholder="Your name" maxLength={60} className="flex-1" />
             <SubmitButton variant="outline">Start fresh<ArrowRight /></SubmitButton>
           </form>
+        </Card>
+        <Card className="gap-4 p-6">
+          <Link2 className="size-6 text-primary" />
+          <div>
+            <h2 className="text-lg font-semibold">Join a Zoom, Meet or Teams Call</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Paste the meeting link. Parley opens the call and records it live from your browser, including everyone else&apos;s voices, then writes the notes.</p>
+          </div>
+          <div className="mt-auto"><JoinByLink signedIn={!!me} /></div>
         </Card>
       </div>
       {me && <Link href="/home" className="mt-6 text-sm text-primary hover:underline">Continue as {me.name} →</Link>}

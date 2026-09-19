@@ -27,7 +27,8 @@ export async function startFresh(form: FormData) {
   const id = crypto.randomUUID();
   await getDb().insert(s.users).values({ id, name, email: `guest-${id.slice(0, 8)}@guest.parley.example`, title: "Guest workspace" });
   await setSession(id);
-  redirect("/home");
+  // Only known in-app destinations, never an arbitrary URL from the form.
+  redirect(form.get("next") === "/live/mic?join=1" ? "/live/mic?join=1" : "/home");
 }
 
 export async function leaveWorkspace() {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Bookmark, Keyboard, Mic, Pause, PhoneOff, Play, Plus, Radio, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bookmark, ExternalLink, Keyboard, Mic, Pause, PhoneOff, Play, Plus, Radio, X } from "lucide-react";
 import { addHighlight } from "@app/actions/meetings";
 import type { Attachment } from "@/db/json-types";
 import { Agenda, Attachments } from "@/components/event-details";
@@ -21,6 +21,8 @@ import { InlineDots } from "@/components/submit-button";
 import { LeaveCallDialog, useLeaveGuard } from "./leave-dialog";
 import { openDeepgram, TranscriptionUnavailable, type DgLine } from "@/lib/deepgram";
 import { clock } from "@/lib/format";
+import { findMeetingLink, PLATFORM_NAME, type Platform, zoomWebUrl } from "@/lib/meeting-links";
+import { JOIN_KEY } from "@/components/join-by-link";
 
 type Line = { speakerIdx: number; startMs: number; endMs: number; text: string };
 type Event = { id: string; title: string; agenda: string | null; attachments: Attachment[] } | null;
@@ -39,7 +41,7 @@ async function ingest(body: object) {
 }
 
 /** Records a real conversation: mic → Deepgram (nova-3, diarized) → timestamped lines → /api/ingest in small batches. */
-export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Event; defaultSpeakers: string[] }) {
+export function MicCall({ me, event, defaultSpeakers, fromLink = false }: { me: string; event: Event; defaultSpeakers: string[]; fromLink?: boolean }) {
   const router = useRouter();
   const [title, setTitle] = useState(event?.title ?? `Meeting with ${me}`);
   const [speakers, setSpeakers] = useState(defaultSpeakers);
@@ -54,6 +56,8 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
   const [mode, setMode] = useState<"mic" | "typed">("mic");
   const [tabAudio, setTabAudio] = useState(false);
   const [canTab, setCanTab] = useState(false);
+  const [join, setJoin] = useState<{ platform: Platform; url: string } | null>(null);
+  const [joinInput, setJoinInput] = useState("");
   const [warn, setWarn] = useState<string | null>(null);
   const [speaker, setSpeaker] = useState(0);
   const [ids, setIds] = useState<string[]>([]);
@@ -71,7 +75,15 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
 
   useEffect(() => {
     const ok = canStream();
-    setCanTab(ok && typeof navigator.mediaDevices.getDisplayMedia === "function");
+    const tabOk = ok && typeof navigator.mediaDevices.getDisplayMedia === "function";
+    setCanTab(tabOk);
+    // Arrived from "Join by link": pick up the pasted link and set the room up for that call.
+    if (fromLink) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(JOIN_KEY) ?? "null") as { platform: Platform; url: string } | null;
+        if (saved) applyLink(saved, tabOk);
+      } catch { /* no saved link: the room asks for it */ }
+    }
     setSupported(ok);
     if (!ok) setMode("typed");
   }, []);
@@ -79,6 +91,12 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
     s.current.speaker = speaker;
     s.current.n = speakers.length;
   }, [speaker, speakers.length]);
+  function applyLink(l: { platform: Platform; url: string }, tabOk = canTab) {
+    setJoin(l);
+    setTitle((t) => (t.startsWith("Meeting with") ? `${PLATFORM_NAME[l.platform]} call` : t));
+    if (tabOk) setTabAudio(true);
+  }
+
   /** Voice → participant. Your mic is always you (0); with tab audio, diarized voices fill the other seats. */
   const who = (dg: number) => {
     const S = s.current;
@@ -211,7 +229,7 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
       }
     }
     try {
-      const r = await ingest({ op: "start_mic", title, participants: speakers, calendarEventId: event?.id });
+      const r = await ingest({ op: "start_mic", title, participants: speakers, calendarEventId: event?.id, platform: join?.platform });
       Object.assign(S, { meetingId: r.meetingId, t0: Date.now(), live: useMic });
       if (useMic && S.mic) {
         S.graph = captureGraph(S.mic, S.tab);
@@ -324,9 +342,10 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {phase === "setup" && fromLink && <JoinSteps join={join} canTab={canTab} input={joinInput} setInput={setJoinInput} onLink={(l) => applyLink(l)} />}
           {phase === "setup" ? (
             <div className="mx-auto max-w-lg space-y-2 p-8 text-center text-sm text-muted-foreground">
-              <p>Join your call in its usual app, then press <b>Record live microphone</b>. Audio streams to Deepgram (nova-3) for live transcription; lines reach Parley in small batches and anyone watching the meeting sees them live.</p>
+              {!join && <p>Join your call in its usual app, then press <b>Record live microphone</b>. Audio streams to Deepgram (nova-3) for live transcription; lines reach Parley in small batches and anyone watching the meeting sees them live.</p>}
               <p>Deepgram tells voices apart on its own. If it labels someone wrong, tap who&apos;s actually talking (or press 1–{speakers.length}) and that voice stays with them.</p>
               <p className="text-xs">Audio goes from your browser straight to Deepgram; Parley stores only the text.</p>
               {canTab && mode === "mic" && (
@@ -361,5 +380,35 @@ export function MicCall({ me, event, defaultSpeakers }: { me: string; event: Eve
       <LeaveCallDialog open={leaving} onOpenChange={setLeaving} onEnd={end} onDiscard={discard} hasContent={lines.length > 0} />
       {phase === "ending" && <OverlayLoading label={endingLabel} />}
     </div>
+  );
+}
+
+/** Joining from a pasted link: open the call in a tab Parley can hear, then record. */
+function JoinSteps({ join, canTab, input, setInput, onLink }: {
+  join: { platform: Platform; url: string } | null; canTab: boolean; input: string; setInput: (v: string) => void; onLink: (l: { platform: Platform; url: string }) => void;
+}) {
+  if (!join) {
+    const found = findMeetingLink(input.trim());
+    return (
+      <div className="mx-auto mt-6 flex max-w-lg gap-2 px-4">
+        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Paste the Zoom, Meet or Teams link" />
+        <Button disabled={!found} onClick={() => found && onLink(found)}>Use link</Button>
+      </div>
+    );
+  }
+  const name = PLATFORM_NAME[join.platform];
+  const web = join.platform === "zoom" ? zoomWebUrl(join.url) : join.url;
+  return (
+    <ol className="mx-auto mt-6 max-w-lg space-y-3 rounded-xl border bg-muted/30 p-4 text-sm">
+      <li className="space-y-2">
+        <b>1. Open the {name} call</b>{join.platform === "zoom" && " in your browser"}, in a new tab.
+        <div className="flex flex-wrap gap-2">
+          {web && <Button asChild size="sm"><a href={web} target="_blank" rel="noreferrer"><ExternalLink />Open {name}{join.platform === "zoom" ? " in browser" : ""}</a></Button>}
+          {join.platform === "zoom" && <Button asChild size="sm" variant="outline"><a href={join.url} target="_blank" rel="noreferrer">Open Zoom app instead</a></Button>}
+        </div>
+      </li>
+      <li><b>2. Come back here and press Record live microphone.</b> {canTab ? <>Chrome asks what to share: pick the <b>{name} tab</b> and turn on <b>Also share tab audio</b>. That&apos;s how Parley hears everyone else.</> : "This browser can't capture tab audio, so Parley hears your microphone only."}</li>
+      {join.platform === "zoom" && <li className="text-xs text-muted-foreground">Using the Zoom desktop app? A web page can&apos;t hear another app, so Parley records only your mic. Use speakers rather than headphones, or use Zoom in the browser.</li>}
+    </ol>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarPlus, CheckCircle2, Clock, Mic, Radio, Sparkles, Video } from "lucide-react";
 import { Attachments, PLATFORM } from "@/components/event-details";
+import { JoinByLink } from "@/components/join-by-link";
 import { JoinRecord } from "@/components/join-record";
 import { PageHeader } from "@/components/page-header";
 import { AvatarStack } from "@/components/person";
@@ -24,6 +25,7 @@ export default async function Home() {
         <Button asChild variant="outline"><Link href="/live"><Radio />Replay a sample</Link></Button>
         <Button asChild><Link href="/live/mic"><Mic />Record a meeting</Link></Button>
       </PageHeader>
+      <div className="border-b px-6 py-3"><JoinByLink signedIn compact /></div>
       <div className="grid gap-6 p-6 xl:grid-cols-[1fr_320px]">
         <section className="min-w-0 space-y-6">
           <div className="grid grid-cols-3 gap-3">
