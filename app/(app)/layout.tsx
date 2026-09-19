@@ -20,15 +20,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mt-3 px-1"><CommandBar /></div>
         <nav className="mt-4 flex flex-col gap-1">
           <NavLink href="/home"><Home />Home</NavLink>
-          <NavLink href="/ask"><Sparkles />Ask Parley</NavLink>
-          <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>
-          <NavLink href="/action-items"><CheckSquare />Action items</NavLink>
+          <NavLink href="/ask" tour="nav-ask"><Sparkles />Ask Parley</NavLink>
+          <NavLink href="/calendar" tour="nav-calendar"><CalendarDays />Calendar</NavLink>
+          <NavLink href="/action-items" tour="nav-tasks"><CheckSquare />Action items</NavLink>
           <NavLink href="/search"><Search />Search</NavLink>
-          <NavLink href="/settings"><Settings />Settings</NavLink>
+          <NavLink href="/settings" tour="nav-settings"><Settings />Settings</NavLink>
         </nav>
         <div className="mt-auto space-y-2">
         <GuestNotice me={me} compact />
-        <div className="flex items-center gap-2 rounded-lg border bg-background p-2">
+        <div data-tour="account" className="flex items-center gap-2 rounded-lg border bg-background p-2">
           {me.avatarUrl ? <img src={me.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-8 rounded-full" /> : <PersonAvatar name={me.name} color="#0F766E" className="size-8" />}
           <div className="min-w-0 flex-1 text-xs">
             <div className="flex items-center gap-1.5"><span className="truncate font-medium">{me.name}</span><ModeBadge me={me} /></div>
@@ -43,8 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main id="main" className="min-w-0 flex-1">
         <nav className="sticky top-0 z-20 flex items-center justify-around border-b bg-background/95 p-1.5 backdrop-blur md:hidden">
           <NavLink href="/home"><Home />Home</NavLink>
-          <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>
-          <NavLink href="/action-items"><CheckSquare />Tasks</NavLink>
+          <NavLink href="/calendar" tour="nav-calendar"><CalendarDays />Calendar</NavLink>
+          <NavLink href="/action-items" tour="nav-tasks"><CheckSquare />Tasks</NavLink>
           <NavLink href="/search"><Search />Search</NavLink>
         </nav>
         {children}

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Tour } from "@/components/tour";
+import { APP_TOUR } from "@/components/tour-steps";
 import { AlertTriangle, CalendarPlus, CheckCircle2, Mic, Radio, Sparkles } from "lucide-react";
 import { CommandBar } from "@/components/command-bar";
 import { GuestNotice } from "@/components/mode-badge";
@@ -32,26 +34,29 @@ export default async function Home() {
   return (
     <div className="mx-auto max-w-[1400px] px-6 pb-12">
       <header className="flex flex-wrap items-end justify-between gap-4 pb-5 pt-8">
-        <div>
+        <div data-tour="stats">
           <h1 className="text-2xl font-semibold tracking-[-0.02em]">Good to see you, {me.name.split(" ")[0]}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             <span className="tabular-nums text-foreground">{meetings.length}</span> calls · <span className="tabular-nums text-foreground">{hours.toFixed(1)}h</span> recorded · <span className="tabular-nums text-foreground">{open}</span> open action items
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild variant="ghost"><Link href="/live"><Radio />Replay a sample</Link></Button>
-          <Button asChild><Link href="/live/mic"><Mic />Record</Link></Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Tour id="app" steps={APP_TOUR} autoStart label="Tour" className="text-muted-foreground hover:bg-muted hover:text-foreground" />
+          <div data-tour="record" className="flex gap-2">
+            <Button asChild variant="ghost"><Link href="/live"><Radio />Replay a sample</Link></Button>
+            <Button asChild><Link href="/live/mic"><Mic />Record</Link></Button>
+          </div>
         </div>
       </header>
 
       <div className="space-y-2">
         <GuestNotice me={me} />
-        <CommandBar variant="hero" />
-        <JoinByLink signedIn compact />
+        <div data-tour="command"><CommandBar variant="hero" /></div>
+        <div data-tour="link"><JoinByLink signedIn compact /></div>
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[272px_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-6 lg:self-start">
+        <aside data-tour="upcoming" className="lg:sticky lg:top-6 lg:self-start">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">Upcoming</h2>
             <Link href="/calendar" className="text-xs text-muted-foreground hover:text-foreground">Calendar →</Link>
@@ -74,7 +79,7 @@ export default async function Home() {
           </ol>
         </aside>
 
-        <section className="min-w-0 space-y-8">
+        <section data-tour="meetings" className="min-w-0 space-y-8">
           {!meetings.length && (
             <div className="rounded-xl border border-dashed p-10 text-center">
               <Mic className="mx-auto size-6 text-primary" />

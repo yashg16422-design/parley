@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowRight, Bot, CalendarDays, FileText, KeyRound, ListChecks, Lock, MessageSquareText, Radio, Scissors, Search, Sparkles, Waves } from "lucide-react";
 import { enterDemo, startFresh } from "@app/actions/workspace";
 import { JoinByLink } from "@/components/join-by-link";
+import { Tour } from "@/components/tour";
+import { LANDING_TOUR } from "@/components/tour-steps";
 import { AskMock, CallMock, SlackMock } from "@/components/landing/mockups";
 import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
@@ -82,19 +84,24 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-white/65 sm:text-lg">Record Zoom, Meet and Teams calls from your browser. Parley writes the summary and action items while you talk, briefs your team in Slack, and links every claim to the moment it was said.</p>
 
-          <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left backdrop-blur">
+          <div data-tour="join" className="mx-auto mt-10 max-w-xl rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left backdrop-blur">
             <p className="mb-3 text-sm font-medium text-white">Paste a meeting link to record it</p>
             <JoinByLink signedIn={!!me} />
             {!me && <p className="mt-2 text-xs text-white/45">Starts a Try-now workspace (no signup, kept 24 hours). Sign in to keep it.</p>}
             {limited && <p className="mt-2 text-sm text-amber-300">Too many new workspaces from this network. Try again in an hour, or open the demo.</p>}
             {auth && AUTH_MESSAGE[auth] && <p className="mt-2 text-sm text-amber-300">{AUTH_MESSAGE[auth]}</p>}
           </div>
+          <Tour
+            id="landing" steps={LANDING_TOUR} label="Take the 60-second tour"
+            finish={me ? { label: "Continue on the dashboard", href: "/home?tour=1" } : { label: "Open the demo", action: enterDemo, next: "/home?tour=1" }}
+            className="mt-6 border border-white/15 text-white/80 hover:border-white/30 hover:text-white"
+          />
         </section>
 
         {/* Three ways in, side by side, with the differences spelled out */}
         <section id="start" className="mx-auto max-w-6xl scroll-mt-10 px-6 pb-20">
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+            <div data-tour="try" className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Try now · no signup</p>
               <h2 className="mt-2 text-lg font-semibold text-white">Start a Live New Meeting</h2>
               <p className="mb-5 mt-1.5 text-sm text-white/55">Everything works right away. Your workspace and recordings are deleted after 24 hours unless you sign in.</p>
@@ -103,7 +110,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
                 <SubmitButton className="h-10 bg-white text-slate-900 hover:bg-white/90">Try now<ArrowRight /></SubmitButton>
               </form>
             </div>
-            <div className="relative flex flex-col rounded-2xl border border-cyan-300/40 bg-cyan-300/[0.07] p-6 shadow-[0_20px_60px_-30px_rgb(34_211_238/0.6)]">
+            <div data-tour="google" className="relative flex flex-col rounded-2xl border border-cyan-300/40 bg-cyan-300/[0.07] p-6 shadow-[0_20px_60px_-30px_rgb(34_211_238/0.6)]">
               <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">Full version · free</p>
               <h2 className="mt-2 text-lg font-semibold text-white">Sign up with Google</h2>
               <p className="mb-5 mt-1.5 text-sm text-white/55">Your recordings, notes, scratchpads, API keys, calendar and Slack briefings are saved to your account, on every device.</p>
@@ -111,14 +118,14 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
                 <span className="flex size-5 items-center justify-center rounded-full bg-white text-[11px] font-bold text-slate-900">G</span>Continue with Google
               </a>
             </div>
-            <div className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+            <div data-tour="demo" className="flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-6">
               <p className="text-xs font-semibold uppercase tracking-wide text-white/50">Demo · sample data</p>
               <h2 className="mt-2 text-lg font-semibold text-white">Enter Reviewer Demo Workspace</h2>
               <p className="mb-5 mt-1.5 text-sm text-white/55">Explore Maya Chen&apos;s 20 recorded meetings, an 8-person hour-long call, clips and a busy calendar. Shared by every visitor.</p>
               <form action={enterDemo} className="mt-auto"><SubmitButton variant="outline" className="h-10 w-full border-white/20 bg-transparent text-white hover:bg-white/10">Open the demo<ArrowRight /></SubmitButton></form>
             </div>
           </div>
-          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
+          <div data-tour="modes" className="mt-6 overflow-x-auto rounded-2xl border border-white/10">
             <table className="w-full min-w-[560px] text-sm">
               <thead className="bg-white/[0.04] text-left text-xs text-white/50">
                 <tr><th className="px-4 py-3 font-medium" /><th className="px-4 py-3 font-medium">Try now</th><th className="px-4 py-3 font-medium text-cyan-300">Full version</th><th className="px-4 py-3 font-medium">Demo</th></tr>
@@ -132,7 +139,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
           </div>
         </section>
 
-        <section className="mx-auto max-w-5xl px-6"><CallMock /></section>
+        <section className="mx-auto max-w-5xl px-6"><div data-tour="call"><CallMock /></div></section>
 
         {/* Features */}
         <section id="features" className="mx-auto max-w-6xl px-6 pt-28">
@@ -142,7 +149,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
               <h2 className="mt-3 text-4xl font-semibold leading-tight tracking-[-0.03em] text-white">Everything after the call, done before you close the tab.</h2>
               <p className="mt-4 max-w-md text-white/60">No bot joins your meeting. Parley listens from your browser, so it works on any call you can open in a tab.</p>
             </div>
-            <div className="grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2">
+            <div data-tour="features" className="grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2">
               {FEATURES.map(([Icon, title, body]) => (
                 <div key={title} className="bg-[oklch(0.14_0.015_260)] p-6 transition-colors hover:bg-[oklch(0.16_0.02_255)]">
                   <Icon className="size-5 text-cyan-300" />
@@ -162,10 +169,10 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-white">Your team knows what happened before you&apos;ve left the call.</h2>
               <p className="mt-4 max-w-md text-white/60">The moment notes are ready, Parley posts a briefing to Slack: the summary, the agenda, who talked how much, and every action item with its owner.</p>
             </div>
-            <SlackMock />
+            <div data-tour="slack"><SlackMock /></div>
           </div>
           <div className="grid items-center gap-12 lg:grid-cols-2">
-            <AskMock />
+            <div data-tour="ask"><AskMock /></div>
             <div className="lg:order-first">
               <p className="flex items-center gap-2 text-sm font-medium text-cyan-300"><Bot className="size-4" />AI briefings with Ask Parley</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-white">Ask across every meeting. Every answer shows its receipts.</h2>
@@ -176,7 +183,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
 
         {/* Integrations */}
         <section id="integrations" className="mx-auto max-w-6xl px-6 pt-32">
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent p-8 sm:p-12">
+          <div data-tour="integrations" className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent p-8 sm:p-12">
             <div className="grid gap-6 lg:grid-cols-2">
               <h2 className="text-4xl font-semibold leading-tight tracking-[-0.03em] text-white">Works with the tools you already use.</h2>
               <p className="self-end text-white/60">Record on Zoom, Meet or Teams. Transcribe with Deepgram. Write notes with Claude, ChatGPT or free Hugging Face models, with your own keys if you like. Brief the team in Slack.</p>
@@ -192,7 +199,7 @@ export default async function Landing({ searchParams }: { searchParams: Promise<
         </section>
 
         {/* Open core */}
-        <section id="open" className="mx-auto grid max-w-6xl gap-10 px-6 pt-32 lg:grid-cols-[1.1fr_0.9fr]">
+        <section id="open" data-tour="open" className="mx-auto grid max-w-6xl gap-10 px-6 pt-32 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <p className="flex items-center gap-2 text-sm font-medium text-cyan-300"><KeyRound className="size-4" />Open core</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-white">Bring your own keys. Keep your costs and your data.</h2>

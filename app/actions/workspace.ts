@@ -12,11 +12,12 @@ import { currentUser, setSession, UID_COOKIE } from "@/session";
 
 const DEMO_EMAIL = process.env.DEMO_USER_EMAIL ?? "maya@driftwood.example";
 
-export async function enterDemo() {
+export async function enterDemo(form?: FormData) {
   const maya = await getDb().query.users.findFirst({ where: eq(s.users.email, DEMO_EMAIL) });
   if (!maya) throw new Error("Demo data missing: run npm run db:seed");
   await setSession(maya.id);
-  redirect("/home");
+  // The landing tour hands off to the dashboard tour; nothing else is accepted as a destination.
+  redirect(form?.get("next") === "/home?tour=1" ? "/home?tour=1" : "/home");
 }
 
 /** "Try now": a temporary workspace, no signup. The sweeper deletes it after 24 hours unless its owner signs up. */
