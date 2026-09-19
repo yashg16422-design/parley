@@ -30,8 +30,13 @@ function Answer({ a }: { a: AskResult }) {
   );
 }
 
-export function AskView({ initial }: { initial?: string }) {
+/** Chat history lives in this tab's sessionStorage (per user): it survives navigation and reloads, and is gone when the tab closes. */
+const MAX_TURNS = 30;
+const store = (userId: string) => `parley_ask:${userId}`;
+
+export function AskView({ initial, userId }: { initial?: string; userId: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [restored, setRestored] = useState(false);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -53,9 +58,28 @@ export function AskView({ initial }: { initial?: string }) {
     }
   }
   useEffect(() => {
-    if (initial && !asked.current) (asked.current = true), void run(initial);
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(store(userId)) ?? "[]") as Turn[];
+      if (Array.isArray(saved) && saved.length) setTurns(saved);
+    } catch {}
+    setRestored(true);
+  }, [userId]);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      // Only answered turns: a question still in flight when the tab reloads would hang forever.
+      sessionStorage.setItem(store(userId), JSON.stringify(turns.filter((t) => t.a || t.error).slice(-MAX_TURNS)));
+    } catch {}
+  }, [turns, restored, userId]);
+  useEffect(() => {
+    if (initial && restored && !asked.current) {
+      asked.current = true;
+      void run(initial);
+      // Asked once: a reload must not ask it again (the answer is already in the saved history).
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial]);
+  }, [initial, restored]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [turns]);
@@ -109,6 +133,7 @@ export function AskView({ initial }: { initial?: string }) {
       <form onSubmit={(e) => (e.preventDefault(), run(q))} className="sticky bottom-0 flex gap-2 border-t bg-background py-4">
         <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask about any meeting or what’s coming up…" maxLength={500} className="h-11" />
         <Button size="icon" className="size-11" disabled={busy || q.trim().length < 3} aria-label="Ask"><ArrowUp /></Button>
+        {turns.length > 0 && <Button type="button" variant="outline" className="h-11" disabled={busy} onClick={() => setTurns([])}>New chat</Button>}
       </form>
     </div>
   );
