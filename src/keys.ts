@@ -1,10 +1,11 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./db";
 import * as s from "./db/schema";
 import { open, seal } from "./vault";
 
 export type SecretKind = (typeof s.secretKind.enumValues)[number];
-const ENV: Record<SecretKind, string> = { deepgram: "DEEPGRAM_API_KEY", huggingface: "HF_TOKEN" };
+const ENV: Record<SecretKind, string> = { deepgram: "DEEPGRAM_API_KEY", huggingface: "HF_TOKEN", anthropic: "ANTHROPIC_API_KEY", openai: "OPENAI_API_KEY" };
 
 /**
  * BYOK resolution: the tenant's own key wins, then the server's env key, else
@@ -30,7 +31,17 @@ export async function deleteKey(db: Database, userId: string, kind: SecretKind) 
 
 /** Live check before saving, so a bad key fails in settings, not mid-meeting. */
 export async function checkKey(kind: SecretKind, key: string): Promise<string | null> {
-  const r = kind === "deepgram"
+  if (kind === "anthropic") {
+    try {
+      await new Anthropic({ apiKey: key, maxRetries: 0 }).models.list({ limit: 1 });
+      return null;
+    } catch (e) {
+      return e instanceof Anthropic.AuthenticationError ? "Anthropic rejected this key" : e instanceof Anthropic.APIError ? `Anthropic returned ${e.status}` : "couldn't reach Anthropic";
+    }
+  }
+  const r = kind === "openai"
+    ? await fetch("https://api.openai.com/v1/models", { headers: { authorization: `Bearer ${key}` } }).catch(() => null)
+    : kind === "deepgram"
     ? await fetch("https://api.deepgram.com/v1/auth/grant", { method: "POST", headers: { authorization: `Token ${key}`, "content-type": "application/json" }, body: JSON.stringify({ ttl_seconds: 30 }) }).catch(() => null)
     : await fetch("https://huggingface.co/api/whoami-v2", { headers: { authorization: `Bearer ${key}` } }).catch(() => null);
   if (!r) return "couldn't reach the provider";

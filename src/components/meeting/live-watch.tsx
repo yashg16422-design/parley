@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Loader2, PhoneOff, X } from "lucide-react";
 import { LeaveCallDialog } from "@/components/live/leave-dialog";
+import { LiveInsightsPanel } from "@/components/live/live-insights-panel";
 import { OverlayLoading } from "@/components/loading-dots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,10 +98,13 @@ export function LiveWatch({ id, title, participants, initial, initialStatus, isO
         <ParticipantGrid participants={participants} activeId={status === "live" ? last?.participantId : null} className="mx-auto max-w-3xl [&>div]:max-h-[16dvh]" />
       </div>
       {status === "processing" && <OverlayLoading label="The call ended. Writing notes…" />}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-h-0 overflow-y-auto">
         <Transcript segments={segs} colors={Object.fromEntries(participants.map((p) => [p.id, p.color]))} activeIdx={segs.length - 1} onLine={() => {}} />
         {!segs.length && <p className="p-10 text-center text-sm text-muted-foreground">Waiting for the first words…</p>}
         <div ref={bottom} />
+      </div>
+      <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block"><LiveInsightsPanel meetingId={id} lineCount={segs.length} /></aside>
       </div>
     </div>
   );

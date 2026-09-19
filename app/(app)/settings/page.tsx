@@ -13,7 +13,9 @@ import { vaultReady } from "@/vault";
 
 const PROVIDERS = [
   { kind: "deepgram", name: "Deepgram", env: "DEEPGRAM_API_KEY", hint: "Live transcription. Needs the Member role so it can issue browser tokens.", placeholder: "Deepgram API key" },
-  { kind: "huggingface", name: "Hugging Face", env: "HF_TOKEN", hint: "AI notes. Fine-grained token with “Make calls to Inference Providers”.", placeholder: "hf_…" },
+  { kind: "anthropic", name: "Claude (Anthropic)", env: "ANTHROPIC_API_KEY", hint: "AI notes and Ask Parley. Tried first when saved.", placeholder: "sk-ant-…" },
+  { kind: "openai", name: "ChatGPT (OpenAI)", env: "OPENAI_API_KEY", hint: "AI notes and Ask Parley. Tried after Claude.", placeholder: "sk-…" },
+  { kind: "huggingface", name: "Hugging Face", env: "HF_TOKEN", hint: "Free open models. Fine-grained token with “Make calls to Inference Providers”. Tried last.", placeholder: "hf_…" },
 ] as const;
 
 /** Bring-your-own keys, the no-OAuth iCal calendar, and access tokens for scripts and the capture extension. */

@@ -50,6 +50,13 @@
       "when": 1789802571201,
       "tag": "0006_recordings",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789807537020,
+      "tag": "0007_llm_pool",
+      "breakpoints": true
     }
   ]
 }

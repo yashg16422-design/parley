@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Bookmark, PhoneOff, Radio, Sparkles, X } from "lucide-react";
 import { OverlayLoading } from "@/components/loading-dots";
 import { LeaveCallDialog, useLeaveGuard } from "./leave-dialog";
+import { LiveInsightsPanel } from "./live-insights-panel";
 import { addHighlight } from "@app/actions/meetings";
 import { ParticipantGrid, type Participant } from "@/components/meeting/participant-grid";
 import { lineAt, type Seg } from "@/components/meeting/player";
@@ -116,7 +117,8 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
   }, [heard.length]);
 
   return (
-    <div className="grid h-dvh grid-rows-[auto_auto_1fr]">
+    <div className="grid h-dvh lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid min-h-0 grid-rows-[auto_auto_1fr]">
       <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
         {(phase === "ready" || phase === "error") && <Button variant="ghost" size="icon" asChild><Link href="/live" aria-label="Back"><ArrowLeft /></Link></Button>}
         {phase === "live" ? <Badge className="gap-1.5 bg-red-600 text-white"><span className="size-1.5 animate-pulse rounded-full bg-white" />REC {clock(clockMs)}</Badge> : <Badge variant="secondary"><Radio />Simulated call</Badge>}
@@ -152,6 +154,10 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
         )}
         <div ref={bottom} />
       </div>
+    </div>
+      <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block">
+        {phase === "ready" ? <p className="text-sm text-muted-foreground">Live notes build here as the replay runs: decisions, action items and open questions, with AI notes for each finished 10-minute window.</p> : <LiveInsightsPanel meetingId={live.current.meetingId || null} lineCount={heard.length} />}
+      </aside>
       <LeaveCallDialog open={leaving} onOpenChange={setLeaving} onEnd={end} onDiscard={discard} hasContent={segments.some((x) => x.endMs <= clockMs)} />
       {phase === "ending" && <OverlayLoading label={endingLabel} />}
     </div>

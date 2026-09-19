@@ -1,20 +1,19 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { applyExtractiveOutputs, applySimulatedOutputs } from "./ai/simulated";
-import { hfClient, type LlmClient } from "./ai/llm";
+import type { LlmClient } from "./ai/llm";
+import { llmForUser } from "./ai/providers";
 import { processMeeting, processWindows } from "./ai/pipeline";
 import type { Database } from "./db";
 import * as s from "./db/schema";
-import { resolveKey } from "./keys";
 import { notifyMeeting } from "./live-bus";
 import { sendMeetingBriefing } from "./notify/slack";
 
 const rows = <T>(r: unknown) => (r as { rows: T[] }).rows;
 
-/** The live model for a meeting: its owner's own HF key, else the server's, else null (simulated outputs). */
+/** The model pool for a meeting: its owner's own Claude / ChatGPT / HF keys, then the server's, else null (simulated outputs). */
 export async function llmFor(db: Database, meetingId: string): Promise<LlmClient | null> {
   const m = await db.query.meetings.findFirst({ where: eq(s.meetings.id, meetingId), columns: { ownerId: true } });
-  const k = await resolveKey(db, m?.ownerId, "huggingface");
-  return k ? hfClient({ token: k.key }) : null;
+  return llmForUser(db, m?.ownerId);
 }
 
 /**

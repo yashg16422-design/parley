@@ -1,5 +1,6 @@
-import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves, Settings } from "lucide-react";
+import { CalendarDays, CheckSquare, Home, LogOut, Search, Waves, Settings, Sparkles } from "lucide-react";
 import { leaveWorkspace } from "@app/actions/workspace";
+import { CommandBar } from "@/components/command-bar";
 import { NavLink } from "@/components/nav-link";
 import { SubmitButton } from "@/components/submit-button";
 import { PersonAvatar } from "@/components/person";
@@ -15,8 +16,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Waves className="size-4" /></span>
           Parley
         </div>
+        <div className="mt-3 px-1"><CommandBar /></div>
         <nav className="mt-4 flex flex-col gap-1">
           <NavLink href="/home"><Home />Home</NavLink>
+          <NavLink href="/ask"><Sparkles />Ask Parley</NavLink>
           <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>
           <NavLink href="/action-items"><CheckSquare />Action items</NavLink>
           <NavLink href="/search"><Search />Search</NavLink>

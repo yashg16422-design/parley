@@ -14,7 +14,8 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { LineMerger, MIC, type CapturedLine } from "../src/capture/dual-stream";
 import { checkFeedUrl, connectIcs, fetchFeed, FeedError, parseFeed, syncIcs } from "../src/calendar/ics";
 import * as s from "../src/db/schema";
-import { resolveKey, saveKey } from "../src/keys";
+import { deleteKey, resolveKey, saveKey } from "../src/keys";
+import { poolClient, providersFor, toAnthropic } from "../src/ai/providers";
 import { takeToken } from "../src/rate-limit";
 import { sweep } from "../src/sweep";
 import { briefingBlocks, slackWebhook } from "../src/notify/slack";
@@ -143,6 +144,22 @@ async function main() {
   const row = await db.query.userSecrets.findFirst({ where: eq(s.userSecrets.userId, maya!.id) });
   assert.ok(!row!.ciphertext.includes("maya-rotated") && row!.last4 === "-key", "stored sealed, only last 4 in clear");
   console.log("✓ BYOK: tenant key beats server env key, rotation upserts, other tenants fall back to env");
+
+  // Model pool: the user's own keys first (Claude > ChatGPT > HF), then server keys; failures fall through.
+  process.env.OPENAI_API_KEY = "server-openai-key";
+  await saveKey(db, maya!.id, "anthropic", "maya-anthropic-key");
+  assert.deepEqual((await providersFor(db, maya!.id)).map((p) => `${p.provider}:${p.source}`), ["anthropic:tenant", "openai:env"]);
+  assert.deepEqual((await providersFor(db, raj!.id)).map((p) => `${p.provider}:${p.source}`), ["openai:env"]);
+  delete process.env.OPENAI_API_KEY;
+  assert.deepEqual(await providersFor(db, raj!.id), [], "no keys anywhere → no model (simulated notes)");
+  const failing = { model: "a", config: "x|a", complete: async () => { throw new Error("401"); } };
+  const working = { model: "b", config: "y|b", complete: async () => "ok" };
+  const pool = poolClient([failing, working]);
+  assert.deepEqual([await pool.complete([]), pool.model, pool.config], ["ok", "b", "x|a > y|b"]);
+  await assert.rejects(poolClient([failing]).complete([]), /every model in the pool failed/);
+  assert.deepEqual(toAnthropic([{ role: "system", content: "S1" }, { role: "user", content: "U" }, { role: "system", content: "S2" }]), { system: "S1\n\nS2", messages: [{ role: "user", content: "U" }] });
+  await deleteKey(db, maya!.id, "anthropic"); // leave later tests on the no-model path
+  console.log("✓ model pool: tenant Claude key → server ChatGPT key → none; failing provider falls through; system prompts mapped for Claude");
 
   // iCal parsing.
   const { events, skipped } = parseFeed(ics(), FROM, TO);

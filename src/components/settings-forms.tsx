@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 const Status = ({ s }: { s: FormState }) =>
   s.error ? <p className="text-sm text-destructive">{s.error}</p> : s.ok ? <p className="text-sm text-emerald-600">{s.ok}</p> : null;
 
-export function KeyForm({ kind, placeholder }: { kind: "deepgram" | "huggingface"; placeholder: string }) {
+export function KeyForm({ kind, placeholder }: { kind: "deepgram" | "huggingface" | "anthropic" | "openai"; placeholder: string }) {
   const [state, action, pending] = useActionState(saveProviderKey, {});
   return (
     <form action={action} className="space-y-2">

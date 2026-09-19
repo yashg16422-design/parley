@@ -15,6 +15,8 @@ import { modelChunkNotes } from "../src/ai/ground";
 import { extractJson, type LlmClient } from "../src/ai/llm";
 import { processMeeting, processWindows, versionFor } from "../src/ai/pipeline";
 import { resolveSummary } from "../src/summaries";
+import { ask, gatherEvidence, groundAnswer, keywords, retrievalQuery } from "../src/ai/ask";
+import { liveInsights } from "../src/live-insights";
 import { drainMeeting } from "../src/jobs";
 import { closedWindows, planWindows, type Seg } from "../src/ai/windows";
 import * as s from "../src/db/schema";
@@ -191,6 +193,36 @@ async function main() {
   const hits = await searchTranscripts(db, "single sign-on", { userId: stableId("user:aisha@driftwood.example") });
   assert.ok(hits.length > 0 && hits.every((h) => h.parts.some((p) => p.hit) && !h.parts.some((p) => /[\u0002\u0003<]/.test(p.text))), "owner filter + safe highlighted parts");
   console.log(`✓ search: "single sign-on" ${longForm} meetings (was 2), "SSO" ${sso}, "SAML" ${saml}, "SSO timeline" ${both}`);
+
+  // Ask Parley: synonym-aware retrieval across meetings, strict citation grounding.
+  const askUser = stableId("user:maya@driftwood.example");
+  assert.deepEqual(keywords("What did the customers say about SSO?"), ["customers", "sso"]);
+  assert.deepEqual(retrievalQuery("What did customers say about single sign-on?"), ["single sign-on", "customers"]);
+  const ev = await gatherEvidence(db, askUser, "What did customers say about single sign-on?");
+  assert.ok(ev.length >= 5 && new Set(ev.map((e) => e.meetingId)).size >= 3 && ev.every((e, i) => e.n === i + 1 && e.text), `evidence from several meetings (${ev.length})`);
+  assert.ok(ev.some((e) => /SSO|SAML|single sign-on/i.test(e.text)), "synonym expansion reached SSO/SAML lines");
+  const ga = groundAnswer(`Customers asked for SSO before signing [1]. Pricing was fine [99]. Everyone loved it. It blocks two deals [2][3].`, ev);
+  assert.equal(ga.answer, "Customers asked for SSO before signing [1]. It blocks two deals [2][3].");
+  assert.deepEqual([[...ga.used].sort(), ga.dropped], [[1, 2, 3], 2], "bad citation and uncited sentence dropped");
+  const fakeAsk = { model: "fake-ask", config: "fake", complete: async () => '{"answer": "Enterprise buyers want SAML SSO first [1][2]. Nobody mentioned pricing [40]."}' };
+  const a = await ask(db, askUser, "What did customers say about SSO?", fakeAsk);
+  assert.equal(a.source, "ai");
+  assert.ok(a.citations.length === 2 && a.citations.every((c) => new RegExp(`^/meetings/${c.meetingId}\\?t=${c.startMs}#line-${c.seq}$`).test(c.href)), JSON.stringify(a.citations.map((c) => c.href)));
+  assert.equal(a.answer, "Enterprise buyers want SAML SSO first [1][2].");
+  const quotes = await ask(db, askUser, "What did customers say about SSO?", null);
+  assert.ok(quotes.source === "quotes" && quotes.citations.length > 0 && /\[1\]/.test(quotes.answer));
+  assert.equal((await ask(db, askUser, "zebra xylophone quokka", fakeAsk)).source, "none");
+  assert.equal((await gatherEvidence(db, stableId("user:nobody"), "SSO")).length, 0, "other workspaces see nothing");
+  console.log(`✓ Ask Parley: ${ev.length} evidence lines from ${new Set(ev.map((e) => e.meetingId)).size} meetings via synonyms; invalid/uncited sentences dropped; ?t= deep links; quote fallback without a model; scoped per user`);
+
+  // Live insights: AI notes for processed windows, rules for the rest.
+  const li = await liveInsights(db, heroId);
+  assert.ok(li.aiWindows === wins.length && li.source === "ai" && li.actions.length > 0 && li.actions.every((x) => x.by === "ai" && x.startMs >= 0), JSON.stringify({ ...li, topics: li.topics.length }).slice(0, 300));
+  const plain = await db.query.meetings.findFirst({ where: (t, { and, ne, eq }) => and(ne(t.id, heroId), eq(t.status, "ready")) });
+  await db.delete(s.chunkNotes).where(eq(s.chunkNotes.meetingId, plain!.id));
+  const rules = await liveInsights(db, plain!.id);
+  assert.ok(rules.source === "rules" && rules.lines > 0 && [...rules.decisions, ...rules.actions, ...rules.questions].every((x) => x.by === "rules"));
+  console.log(`✓ live notes: ${li.aiWindows} AI windows → ${li.actions.length} actions, ${li.decisions.length} decisions, ${li.questions.length} questions; no windows → rule-based (${rules.actions.length} actions)`);
 
   // Summary cache key includes the model config: switching models re-renders instead of serving stale output.
   const [cfgA, cfgB] = [{ ...fakeModel(), config: "hf|model-a" }, { ...fakeModel(), config: "hf|model-b" }];

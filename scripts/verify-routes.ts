@@ -135,6 +135,18 @@ async function openCore(mayasMeeting: string) {
   assert.deepEqual([(await post({ op: "discard", meetingId: rec })).status, (await get(MAYA)).status], [404, 404], "gone, recording included");
   console.log("✓ discard: owner deletes the live call and its recording; others 404; second discard 404");
 
+  // Ask Parley and live notes over HTTP (no model configured on the test server → cited quotes / rule-based).
+  const askIt = (question: string, uid: string | null = MAYA) => fetch(`${BASE}/api/ai/ask`, { method: "POST", headers: { "content-type": "application/json", ...(uid ? { cookie: `parley_uid=${uid}` } : {}) }, body: JSON.stringify({ question }) });
+  assert.equal((await askIt("What about SSO?", null)).status, 401);
+  assert.equal((await askIt("x")).status, 400);
+  const answer = (await (await askIt("What did customers say about single sign-on?")).json()) as { source: string; citations: { href: string }[] };
+  assert.ok(answer.source === "quotes" && answer.citations.length > 0 && answer.citations.every((c) => /^\/meetings\/[0-9a-f-]{36}\?t=\d+#line-\d+$/.test(c.href)), JSON.stringify(answer).slice(0, 300));
+  const notes = await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${MAYA}` } });
+  const insight = (await notes.json()) as { source: string; actions: { text: string }[]; lines: number };
+  assert.ok(notes.status === 200 && insight.lines === 4 && insight.actions.some((x) => /send the update to leadership/.test(x.text)), JSON.stringify(insight).slice(0, 300));
+  assert.equal((await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${RAJ}` } })).status, 404);
+  console.log(`✓ Ask Parley API: ${answer.citations.length} cited quotes with ?t= links (no model on server), 401/400 guards; live notes API: ${insight.actions.length} actions, owner-scoped`);
+
   // Deepgram token rate limit (20 per user per 10 min): burst until refused.
   const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${RAJ}` } });
   let allowed = 0, refused: Response | null = null;

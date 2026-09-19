@@ -10,7 +10,7 @@ import { currentUser } from "@/queries";
 import { vaultReady } from "@/vault";
 
 export type FormState = { ok?: string; error?: string; token?: string };
-const kind = z.enum(["deepgram", "huggingface"]);
+const kind = z.enum(["deepgram", "huggingface", "anthropic", "openai"]);
 const done = (ok: string, extra: Partial<FormState> = {}): FormState => (revalidatePath("/settings"), { ok, ...extra });
 const NO_VAULT = { error: "This server has no PARLEY_SECRET_KEY, so it can't store secrets." };
 

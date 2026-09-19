@@ -461,7 +461,7 @@ export const processingJobs = pgTable(
 // Open core: tenant keys (BYOK) and personal access tokens
 // ---------------------------------------------------------------------------
 
-export const secretKind = pgEnum("secret_kind", ["deepgram", "huggingface"]);
+export const secretKind = pgEnum("secret_kind", ["deepgram", "huggingface", "anthropic", "openai"]);
 
 /** A user's own provider key, AES-256-GCM encrypted (src/vault.ts). Preferred over the server's env keys. */
 export const userSecrets = pgTable(

@@ -22,6 +22,7 @@
     "verify:open-core": "tsx scripts/verify-open-core.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
     "@neondatabase/serverless": "^1.1.0",
     "@tailwindcss/postcss": "^4.3.3",
     "class-variance-authority": "^0.7.1",
