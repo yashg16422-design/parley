@@ -1,0 +1,6 @@
+.env
+.env*.local
+.pglite
+.next
+node_modules
+*.tsbuildinfo
