@@ -41,7 +41,7 @@ async function ingest(body: object) {
 }
 
 /** Records a real conversation: mic → Deepgram (nova-3, diarized) → timestamped lines → /api/ingest in small batches. */
-export function MicCall({ me, event, defaultSpeakers, fromLink = false }: { me: string; event: Event; defaultSpeakers: string[]; fromLink?: boolean }) {
+export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLink = null }: { me: string; event: Event; defaultSpeakers: string[]; fromLink?: boolean; eventLink?: { platform: Platform; url: string } | null }) {
   const router = useRouter();
   const [title, setTitle] = useState(event?.title ?? `Meeting with ${me}`);
   const [speakers, setSpeakers] = useState(defaultSpeakers);
@@ -78,7 +78,8 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false }: { me: 
     const tabOk = ok && typeof navigator.mediaDevices.getDisplayMedia === "function";
     setCanTab(tabOk);
     // Arrived from "Join by link": pick up the pasted link and set the room up for that call.
-    if (fromLink) {
+    if (eventLink) applyLink(eventLink, tabOk);
+    else if (fromLink) {
       try {
         const saved = JSON.parse(sessionStorage.getItem(JOIN_KEY) ?? "null") as { platform: Platform; url: string } | null;
         if (saved) applyLink(saved, tabOk);
@@ -342,7 +343,7 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false }: { me: 
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {phase === "setup" && fromLink && <JoinSteps join={join} canTab={canTab} input={joinInput} setInput={setJoinInput} onLink={(l) => applyLink(l)} />}
+          {phase === "setup" && (fromLink || eventLink) && <JoinSteps join={join} canTab={canTab} input={joinInput} setInput={setJoinInput} onLink={(l) => applyLink(l)} />}
           {phase === "setup" ? (
             <div className="mx-auto max-w-lg space-y-2 p-8 text-center text-sm text-muted-foreground">
               {!join && <p>Join your call in its usual app, then press <b>Record live microphone</b>. Audio streams to Deepgram (nova-3) for live transcription; lines reach Parley in small batches and anyone watching the meeting sees them live.</p>}

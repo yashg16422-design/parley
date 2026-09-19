@@ -9,6 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const me = await currentUser();
   return (
     <div className="flex min-h-dvh">
+      <a href="#main" className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm shadow focus:not-sr-only focus:fixed focus:left-3 focus:top-3">Skip to content</a>
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-muted/30 p-3 md:flex">
         <div className="flex items-center gap-2 px-3 py-3 text-lg font-semibold tracking-tight">
           <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Waves className="size-4" /></span>
@@ -22,7 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/settings"><Settings />Settings</NavLink>
         </nav>
         <div className="mt-auto flex items-center gap-2 rounded-lg border bg-background p-2">
-          <PersonAvatar name={me.name} color="#7C3AED" className="size-8" />
+          <PersonAvatar name={me.name} color="#0F766E" className="size-8" />
           <div className="min-w-0 flex-1 text-xs">
             <div className="truncate font-medium">{me.name}</div>
             <div className="truncate text-muted-foreground">{me.title}</div>
@@ -32,7 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </aside>
-      <main className="min-w-0 flex-1">
+      <main id="main" className="min-w-0 flex-1">
         <nav className="sticky top-0 z-20 flex items-center justify-around border-b bg-background/95 p-1.5 backdrop-blur md:hidden">
           <NavLink href="/home"><Home />Home</NavLink>
           <NavLink href="/calendar"><CalendarDays />Calendar</NavLink>

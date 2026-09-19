@@ -1,4 +1,5 @@
 import { MicCall } from "@/components/live/mic-call";
+import { findMeetingLink } from "@/lib/meeting-links";
 import { calendarEvent, currentUser } from "@/queries";
 
 export default async function MicPage({ searchParams }: { searchParams: Promise<{ eventId?: string; join?: string }> }) {
@@ -10,6 +11,7 @@ export default async function MicPage({ searchParams }: { searchParams: Promise<
     <MicCall
       me={me.name}
       fromLink={join === "1" && !e}
+      eventLink={e ? findMeetingLink(e.meetingUrl) : null}
       event={e ? { id: e.id, title: e.title, agenda: e.agenda, attachments: e.attachments } : null}
       defaultSpeakers={[me.name, ...(others.length ? others : ["Guest"])].slice(0, 8)}
     />

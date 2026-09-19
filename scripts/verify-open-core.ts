@@ -17,6 +17,7 @@ import * as s from "../src/db/schema";
 import { resolveKey, saveKey } from "../src/keys";
 import { takeToken } from "../src/rate-limit";
 import { sweep } from "../src/sweep";
+import { briefingBlocks, slackWebhook } from "../src/notify/slack";
 import { templates } from "../seed/src/templates";
 import { open, seal } from "../src/vault";
 
@@ -243,6 +244,17 @@ async function main() {
   const job = (meetingId: string, attempts: number) => ({ key: `chunk:${meetingId}:0`, meetingId, kind: "chunk_notes" as const, payload: { windowIdx: 0 }, status: "running" as const, attempts, maxAttempts: 3, lockedUntil: ago(1) });
   await db.insert(s.processingJobs).values([job(dead.id, 1), job(doomed.id, 3)]);
 
+  // Capture the Slack briefing the post-meeting processor sends (stubbed webhook).
+  process.env.SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/T000/B000/XXXX";
+  process.env.APP_URL = "https://parley.example";
+  const posted: { url: string; body: ReturnType<typeof briefingBlocks> }[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    if (String(url).startsWith("https://hooks.slack.com/")) return posted.push({ url: String(url), body: JSON.parse(String(init!.body)) }), new Response("ok");
+    if (String(url).startsWith("https://calendar.google.com/")) return new Response(ics(), { status: 200 });
+    return realFetch(url, init);
+  }) as typeof fetch;
+  await db.update(s.calendarConnections).set({ lastSyncedAt: ago(90) });
   const report = await sweep(db);
   const status = async (id: string) => (await db.query.meetings.findFirst({ where: eq(s.meetings.id, id), columns: { status: true } }))!.status;
   const jobOf = async (id: string) => (await db.query.processingJobs.findFirst({ where: eq(s.processingJobs.meetingId, id) }))!;
@@ -251,7 +263,17 @@ async function main() {
   assert.equal((await jobOf(dead.id)).status, "succeeded", "requeued and drained in the same sweep");
   const notes = await db.query.actionItems.findMany({ where: eq(s.actionItems.meetingId, talked.id) });
   assert.ok(notes.some((a) => /release notes/.test(a.text)), "auto-ended call still got its notes");
-  assert.deepEqual(Object.values(await sweep(db)).slice(0, 5), [0, 0, 0, 0, 0], "second sweep is a no-op");
+  const second = await sweep(db);
+  globalThis.fetch = realFetch;
+  assert.equal(report.syncedFeeds, 1, "stale calendar feed refreshed by the sweeper");
+  assert.deepEqual([second.syncedFeeds, second.reclaimedJobs, second.endedStaleCalls, second.abandonedCalls, second.failedMeetings, second.drainedMeetings], [0, 0, 0, 0, 0, 0], "second sweep is a no-op");
+  assert.equal(posted.length, 1, "one briefing, for the one meeting that got notes");
+  const slack = JSON.stringify(posted[0]!.body);
+  assert.ok(slack.includes("Went quiet after talking") && /release notes by Thursday[^"]*— \*Maya Chen\*/.test(slack) && slack.includes("*Talk time*") && slack.includes("https://parley.example/meetings/"), slack.slice(0, 400));
+  assert.deepEqual([slackWebhook("https://evil.example/hook"), slackWebhook("http://hooks.slack.com/x"), slackWebhook("not a url")], [null, null, null], "only https Slack hosts");
+  const big = briefingBlocks({ id: "x", title: "T".repeat(300), startedAt: null, durationMs: 1, platform: "zoom", overview: "<script>&", agenda: null, talk: [], actions: Array.from({ length: 40 }, (_, i) => ({ text: `item ${i} ${"x".repeat(200)}`, owner: null, due: null, verified: true })) });
+  assert.ok(big.blocks.every((b) => !("text" in b) || (b.text as { text: string }).text.length <= 3000) && (big.blocks[0] as { text: { text: string } }).text.text.length <= 150 && JSON.stringify(big).includes("&lt;script&gt;&amp;") && JSON.stringify(big).includes("25 more"), "Slack limits + escaping");
+  console.log("✓ Slack briefing: sent once when notes are ready (title, talk-time bars, action items with owners, deep link); non-Slack hosts refused; 150/3000-char limits and escaping held");
   console.log(`✓ sweeper: stale call with lines → ended + notes, silent call → abandoned, live call untouched; dead worker → requeued + drained, out of retries → meeting failed; idempotent (${report.ms}ms)`);
 
   await client.close();

@@ -6,6 +6,7 @@ import type { Database } from "./db";
 import * as s from "./db/schema";
 import { resolveKey } from "./keys";
 import { notifyMeeting } from "./live-bus";
+import { sendMeetingBriefing } from "./notify/slack";
 
 const rows = <T>(r: unknown) => (r as { rows: T[] }).rows;
 
@@ -48,7 +49,11 @@ export async function drainMeeting(db: Database, meetingId: string, llmOverride?
     await db.update(s.processingJobs)
       .set({ status: "succeeded", durationMs: Date.now() - t0, lastError: llm ? null : "no HF_TOKEN: simulated", lockedUntil: null })
       .where(inArray(s.processingJobs.id, ids));
-    if (final) notifyMeeting(meetingId);
+    if (final) {
+      notifyMeeting(meetingId);
+      // Notes are ready: brief the team (no-op without SLACK_WEBHOOK_URL; never throws).
+      await sendMeetingBriefing(db, meetingId);
+    }
     return { ran: ids.length, simulated: !llm };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

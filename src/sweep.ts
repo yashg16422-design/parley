@@ -1,6 +1,7 @@
 import { and, count, eq, lt, sql } from "drizzle-orm";
 import type { Database } from "./db";
 import * as s from "./db/schema";
+import { syncIcs } from "./calendar/ics";
 import { drainMeeting } from "./jobs";
 import { endCall } from "./live";
 import { notifyMeeting } from "./live-bus";
@@ -55,5 +56,14 @@ export async function sweep(db: Database, { staleMs = 30 * 60_000, budgetMs = 45
     const r = await drainMeeting(db, meeting_id);
     if (!r.error) drained++;
   }
-  return { reclaimedJobs: reclaimed.length, endedStaleCalls: ended, abandonedCalls: abandoned, failedMeetings: failed.length, drainedMeetings: drained, pendingMeetings: due.length - drained, ms: Date.now() - t0 };
+  // 5. Calendar feeds not refreshed in the last hour (budget permitting).
+  const feeds = await db.select({ userId: s.calendarConnections.userId }).from(s.calendarConnections)
+    .where(and(eq(s.calendarConnections.provider, "ics"), lt(sql`coalesce(${s.calendarConnections.lastSyncedAt}, 'epoch')`, new Date(Date.now() - 3_600_000))))
+    .limit(25);
+  let syncedFeeds = 0;
+  for (const f of feeds) {
+    if (Date.now() - t0 > budgetMs) break;
+    await syncIcs(db, f.userId).then(() => syncedFeeds++, () => {});
+  }
+  return { syncedFeeds, reclaimedJobs: reclaimed.length, endedStaleCalls: ended, abandonedCalls: abandoned, failedMeetings: failed.length, drainedMeetings: drained, pendingMeetings: due.length - drained, ms: Date.now() - t0 };
 }
