@@ -1,12 +1,13 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/db";
 import * as s from "@/db/schema";
 import { stableId } from "@/lib/stable-id";
+import { clientIp, takeToken } from "@/rate-limit";
 import { currentUser, setSession, UID_COOKIE } from "@/session";
 
 const DEMO_EMAIL = process.env.DEMO_USER_EMAIL ?? "maya@driftwood.example";
@@ -21,6 +22,8 @@ export async function enterDemo() {
 /** A brand-new, empty workspace user for testing from scratch. */
 export async function startFresh(form: FormData) {
   const name = String(form.get("name") ?? "").trim().slice(0, 60) || "You";
+  // Each fresh workspace gets its own rate-limit buckets, so cap how fast one address can mint them.
+  if (!(await takeToken(getDb(), `ws:ip:${clientIp(await headers())}`, 10, 3_600_000)).ok) redirect("/?limited=1");
   const id = crypto.randomUUID();
   await getDb().insert(s.users).values({ id, name, email: `guest-${id.slice(0, 8)}@guest.parley.example`, title: "Guest workspace" });
   await setSession(id);

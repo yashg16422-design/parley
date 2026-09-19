@@ -6,8 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { currentUserId, findUser } from "@/session";
 
-export default async function Landing() {
-  const me = await findUser(await currentUserId());
+export default async function Landing({ searchParams }: { searchParams: Promise<{ limited?: string }> }) {
+  const [me, { limited }] = await Promise.all([currentUserId().then(findUser), searchParams]);
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-muted/30 p-6">
       <div className="mb-8 flex items-center gap-2 text-2xl font-semibold tracking-tight">
@@ -15,6 +15,7 @@ export default async function Landing() {
         Parley
       </div>
       <p className="mb-8 max-w-md text-center text-muted-foreground">AI meeting notes: record, summarize, search and share your calls.</p>
+      {limited && <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">Too many new workspaces from this network. Try again in an hour, or use the demo workspace.</p>}
       <div className="grid w-full max-w-3xl gap-4 md:grid-cols-2">
         <Card className="gap-4 p-6">
           <Database className="size-6 text-primary" />

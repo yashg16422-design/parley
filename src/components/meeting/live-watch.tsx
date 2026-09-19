@@ -30,7 +30,7 @@ export function LiveWatch({ id, title, participants, initial, initialStatus }: {
     es.addEventListener("status", (e) => {
       const st = (JSON.parse(e.data) as { status: string }).status;
       setStatus(st);
-      if (st === "ready" || st === "failed") es.close(), router.refresh();
+      if (st === "ready" || st === "failed" || st === "abandoned") es.close(), router.refresh();
     });
     return () => es.close();
     // The initial seq only matters for the first connection; EventSource resumes with Last-Event-ID.

@@ -8,12 +8,13 @@
  */
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { modelChunkNotes } from "../src/ai/ground";
 import { extractJson, type LlmClient } from "../src/ai/llm";
-import { processMeeting, processWindows } from "../src/ai/pipeline";
+import { processMeeting, processWindows, versionFor } from "../src/ai/pipeline";
+import { resolveSummary } from "../src/summaries";
 import { drainMeeting } from "../src/jobs";
 import { closedWindows, planWindows, type Seg } from "../src/ai/windows";
 import * as s from "../src/db/schema";
@@ -113,7 +114,7 @@ async function main() {
   const g = { kept: r.kept + live.report.kept, dropped: r.dropped + live.report.dropped, repaired: r.repaired + live.report.repaired, flagged: r.flagged + live.report.flagged };
   assert.equal(g.flagged, 2 * wins.length, JSON.stringify(g));
   assert.ok(g.dropped >= 2 * wins.length && g.repaired >= wins.length - 1, JSON.stringify(g));
-  const chunkRows = await db.select().from(s.chunkNotes).where(and(eq(s.chunkNotes.meetingId, heroId), eq(s.chunkNotes.promptVersion, "hf-v1")));
+  const chunkRows = await db.select().from(s.chunkNotes).where(and(eq(s.chunkNotes.meetingId, heroId), eq(s.chunkNotes.promptVersion, versionFor(llm))));
   assert.ok(chunkRows.length === wins.length && chunkRows.every((c) => c.notes.actionItemCandidates.length === 3), "every window kept its 3 grounded candidates");
   const actions = await db.select().from(s.actionItems).where(and(eq(s.actionItems.meetingId, heroId), eq(s.actionItems.origin, "ai")));
   const seqSet = new Set(segs.map((x) => x.seq));
@@ -130,7 +131,7 @@ async function main() {
   console.log(`✓ grounding: ${JSON.stringify(g)} → ${actions.length} AI actions, ${flagged.length} flagged`);
 
   // Summary: template decides sections; fake citations and unknown sections are gone.
-  const summary = await db.query.summaries.findFirst({ where: and(eq(s.summaries.meetingId, heroId), eq(s.summaries.promptVersion, "hf-v1")) });
+  const summary = await db.query.summaries.findFirst({ where: and(eq(s.summaries.meetingId, heroId), eq(s.summaries.promptVersion, versionFor(llm))) });
   const tpl = await db.query.templates.findFirst({ where: eq(s.templates.id, "product_review") });
   assert.equal(summary?.status, "ready");
   assert.deepEqual(summary!.content!.sections.map((x) => x.id), tpl!.sections.map((x) => x.id));
@@ -191,6 +192,17 @@ async function main() {
   assert.ok(hits.length > 0 && hits.every((h) => h.parts.some((p) => p.hit) && !h.parts.some((p) => /[\u0002\u0003<]/.test(p.text))), "owner filter + safe highlighted parts");
   console.log(`✓ search: "single sign-on" ${longForm} meetings (was 2), "SSO" ${sso}, "SAML" ${saml}, "SSO timeline" ${both}`);
 
+  // Summary cache key includes the model config: switching models re-renders instead of serving stale output.
+  const [cfgA, cfgB] = [{ ...fakeModel(), config: "hf|model-a" }, { ...fakeModel(), config: "hf|model-b" }];
+  const tried = [
+    await resolveSummary(db, heroId, "interview", cfgA), await resolveSummary(db, heroId, "interview", cfgA),
+    await resolveSummary(db, heroId, "interview", cfgB), await resolveSummary(db, heroId, "interview", null),
+  ].map((r) => r.source);
+  assert.deepEqual(tried, ["live", "cache", "live", "cache"], "A renders, A cached, B re-renders (not A's), no model → any real output");
+  assert.notEqual(versionFor(cfgA), versionFor(cfgB));
+  const seeded = await db.query.summaries.findFirst({ where: and(eq(s.summaries.promptVersion, "seed-v1"), sql`${s.summaries.meetingId} <> ${heroId}`) });
+  assert.equal((await resolveSummary(db, seeded!.meetingId, seeded!.templateId, cfgB)).source, "cache", "curated seed outputs stay pinned");
+  console.log(`✓ summary cache key = ${versionFor(cfgA)} (prompt version + model-config hash): switch → re-render, same config → cache, seeds pinned`);
   await client.close();
   console.log("\nAI pipeline verified.");
 }

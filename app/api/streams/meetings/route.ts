@@ -15,7 +15,7 @@ const POLL_MS = 2_000;
 const PING_MS = 15_000;
 /** Close before the function limit; EventSource reconnects with Last-Event-ID and resumes. */
 const LIFETIME_MS = 270_000;
-const DONE = new Set(["ready", "failed"]);
+const DONE = new Set(["ready", "failed", "abandoned"]);
 
 /**
  * Server-Sent Events for one meeting: `lines` (new transcript rows, id = last seq)

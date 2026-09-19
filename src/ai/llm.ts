@@ -5,6 +5,8 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 /** The only thing the pipeline needs from a model; swapped for a fake in tests. */
 export interface LlmClient {
   model: string;
+  /** Provider + model chain; part of every AI cache key, so switching models never serves stale output. */
+  config?: string;
   complete(messages: ChatMessage[], opts?: { maxTokens?: number }): Promise<string>;
 }
 
@@ -24,6 +26,7 @@ export function hfClient({
   if (!token) throw new Error("HF_TOKEN is not set (see .env.example)");
   const client: LlmClient = {
     model: models[0]!,
+    config: `hf|${models.map((m) => m.trim()).join(",")}`,
     async complete(messages, { maxTokens = 2048 } = {}) {
       let last = "";
       for (const model of models) {

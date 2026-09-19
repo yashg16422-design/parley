@@ -36,6 +36,13 @@
       "when": 1789800136446,
       "tag": "0004_open_core",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789801267067,
+      "tag": "0005_sweeper_rate_limits",
+      "breakpoints": true
     }
   ]
 }

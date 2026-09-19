@@ -114,6 +114,26 @@ async function openCore(mayasMeeting: string) {
   assert.equal((await ics({}, { authorization: `Bearer ${cal.token}` })).status, 404, "calendar token accepted by the iCal route");
   console.log("✓ iCal route: host allowlist → 400, not connected → 404, calendar-scoped token accepted, no auth → 401");
   for (const path of ["/settings", "/live/mic"]) assert.equal(await peek(MAYA, path), 200, path);
+
+  // Deepgram token rate limit (20 per user per 10 min): burst until refused.
+  const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${RAJ}` } });
+  let allowed = 0, refused: Response | null = null;
+  for (let i = 0; i < 25 && !refused; i++) {
+    const r = await grant();
+    if (r.status === 429) refused = r;
+    else allowed++;
+  }
+  assert.ok(refused && allowed <= 20 && Number(refused.headers.get("retry-after")) >= 1, `refused after ${allowed}`);
+  console.log(`✓ rate limit: Deepgram tokens refused after ${allowed} requests in the window (429, Retry-After ${refused!.headers.get("retry-after")}s)`);
+
+  const cron = (auth?: string) => fetch(`${BASE}/api/cron/sweep`, { headers: auth ? { authorization: auth } : {} });
+  assert.equal((await cron()).status, 401);
+  assert.equal((await cron("Bearer wrong-secret-of-some-length")).status, 401);
+  const swept = await cron(`Bearer ${process.env.CRON_SECRET}`);
+  const report = (await swept.json()) as Record<string, number>;
+  assert.equal(swept.status, 200, JSON.stringify(report));
+  assert.ok("reclaimedJobs" in report && "abandonedCalls" in report);
+  console.log(`✓ cron sweep: secret required (401 without/wrong), run → ${JSON.stringify(report)}`);
 }
 
 async function main() {

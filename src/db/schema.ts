@@ -68,6 +68,7 @@ export const meetingStatus = pgEnum("meeting_status", [
   "processing", // call ended, AI pipeline running
   "ready", // summaries + action items available
   "failed",
+  "abandoned", // went silent while live with nothing said; closed by the sweeper
 ]);
 export const summaryStatus = pgEnum("summary_status", ["pending", "streaming", "ready", "failed"]);
 /** External video host. Media stays there; Parley stores ids and millisecond ranges only. */
@@ -491,6 +492,16 @@ export const apiTokens = pgTable(
   },
   (t) => [index("api_tokens_user_idx").on(t.userId)],
 );
+
+/**
+ * Sliding-window rate limits: one row per key ("dg:user:<id>", "dg:ip:<addr>"),
+ * holding the timestamps of recent hits. Pruned on every allowed hit, so it
+ * never grows past the limit (src/rate-limit.ts).
+ */
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  hits: timestamp("hits", { withTimezone: true }).array().notNull(),
+});
 
 export const usersRelations = relations(users, ({ many }) => ({
   calendarConnections: many(calendarConnections),

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { renderSummary } from "./ai/pipeline";
+import { PROMPT_VERSION, renderSummary, versionFor } from "./ai/pipeline";
 import { SIMULATED, simulateSummary } from "./ai/simulated";
 import type { Database } from "./db";
 import * as s from "./db/schema";
@@ -11,13 +11,20 @@ export type SummarySource = "cache" | "live" | "simulated";
 export type ResolvedSummary = { source: SummarySource; model: string | null; content: SummaryContent; note?: string };
 
 /**
- * Cache first (real outputs preferred over simulated ones). On a miss, render
+ * Cache first (real outputs preferred over simulated ones). Outputs this
+ * pipeline produced are only reused for the same provider/model config
+ * (`hf-v1:<hash>`); curated seed outputs stay pinned. On a miss, render
  * with the model if one is configured; without one - or if the model fails -
  * build a simulated summary from the meeting record so the UI never breaks.
  */
 export async function resolveSummary(db: Database, meetingId: string, templateId: string, llm: LlmClient | null): Promise<ResolvedSummary> {
+  const key = llm ? versionFor(llm) : null;
   const [cached] = await db.select().from(s.summaries)
-    .where(and(eq(s.summaries.meetingId, meetingId), eq(s.summaries.templateId, templateId), eq(s.summaries.status, "ready")))
+    .where(and(
+      eq(s.summaries.meetingId, meetingId), eq(s.summaries.templateId, templateId), eq(s.summaries.status, "ready"),
+      // A pipeline output from another model config is stale once a model is available.
+      key ? sql`(${s.summaries.promptVersion} = ${key} OR ${s.summaries.promptVersion} NOT LIKE ${`${PROMPT_VERSION}%`})` : undefined,
+    ))
     .orderBy(sql`${s.summaries.promptVersion} = ${SIMULATED}`, desc(s.summaries.updatedAt))
     .limit(1);
   if (cached?.content && (cached.promptVersion !== SIMULATED || !llm)) {

@@ -15,6 +15,9 @@ import { LineMerger, MIC, type CapturedLine } from "../src/capture/dual-stream";
 import { checkFeedUrl, connectIcs, fetchFeed, FeedError, parseFeed, syncIcs } from "../src/calendar/ics";
 import * as s from "../src/db/schema";
 import { resolveKey, saveKey } from "../src/keys";
+import { takeToken } from "../src/rate-limit";
+import { sweep } from "../src/sweep";
+import { templates } from "../seed/src/templates";
 import { open, seal } from "../src/vault";
 
 process.env.PARLEY_SECRET_KEY = "test-secret-key-that-is-at-least-32-chars";
@@ -207,6 +210,49 @@ async function main() {
   m.push([L("tab", 20_000, 21_000, "tail")]);
   assert.deepEqual(m.release(0, true).map((l) => l.text), ["tail"], "end of call flushes everything");
   console.log("✓ dual-stream merger: ordered commits across mic + tab, hold window, straggler clamp, final flush");
+
+  // Sliding-window rate limit: exact under concurrency, bounded storage, window slides.
+  const burst = await Promise.all(Array.from({ length: 12 }, () => takeToken(db, "dg:user:burst", 5, 1_500)));
+  assert.equal(burst.filter((r) => r.ok).length, 5, "12 concurrent requests, limit 5 → exactly 5 pass");
+  const denied = burst.find((r) => !r.ok) as { retryAfterSec: number };
+  assert.ok(denied.retryAfterSec >= 1 && denied.retryAfterSec <= 2);
+  const stored = await db.query.rateLimits.findFirst({ where: eq(s.rateLimits.key, "dg:user:burst") });
+  assert.equal(stored!.hits.length, 5, "denied hits aren't stored");
+  await new Promise((r) => setTimeout(r, 1_600));
+  assert.ok((await takeToken(db, "dg:user:burst", 5, 1_500)).ok, "window slid");
+  assert.equal((await db.query.rateLimits.findFirst({ where: eq(s.rateLimits.key, "dg:user:burst") }))!.hits.length, 1, "expired hits pruned");
+  console.log("✓ rate limit: 5/12 concurrent pass, Retry-After computed, denied hits not stored, window slides and prunes");
+
+  // Sweeper: stale calls, dead workers, stuck meetings, then drains due work.
+  await db.insert(s.templates).values(templates);
+  const ago = (min: number) => new Date(Date.now() - min * 60_000);
+  const meeting = async (title: string, status: "live" | "processing", updatedMin: number) => {
+    const [m] = await db.insert(s.meetings).values({ ownerId: maya!.id, title, platform: "google_meet", status, startedAt: ago(updatedMin + 5), liveUpdatedAt: ago(updatedMin), liveClockMs: 60_000, liveSpeed: 1 }).returning();
+    return m!;
+  };
+  const talked = await meeting("Went quiet after talking", "live", 31);
+  const [p] = await db.insert(s.meetingParticipants).values({ meetingId: talked.id, name: "Maya Chen", speakerIdx: 0, color: "#6366F1", userId: maya!.id }).returning();
+  await db.insert(s.transcriptSegments).values([
+    { meetingId: talked.id, seq: 0, participantId: p!.id, speakerName: "Maya Chen", startMs: 1_000, endMs: 4_000, text: "We decided to ship the beta on Monday." },
+    { meetingId: talked.id, seq: 1, participantId: p!.id, speakerName: "Maya Chen", startMs: 5_000, endMs: 9_000, text: "I'll send the release notes by Thursday." },
+  ]);
+  const silent = await meeting("Opened and forgotten", "live", 45);
+  const active = await meeting("Still going", "live", 2);
+  const dead = await meeting("Worker died, retries left", "processing", 10);
+  const doomed = await meeting("Worker died, out of retries", "processing", 10);
+  const job = (meetingId: string, attempts: number) => ({ key: `chunk:${meetingId}:0`, meetingId, kind: "chunk_notes" as const, payload: { windowIdx: 0 }, status: "running" as const, attempts, maxAttempts: 3, lockedUntil: ago(1) });
+  await db.insert(s.processingJobs).values([job(dead.id, 1), job(doomed.id, 3)]);
+
+  const report = await sweep(db);
+  const status = async (id: string) => (await db.query.meetings.findFirst({ where: eq(s.meetings.id, id), columns: { status: true } }))!.status;
+  const jobOf = async (id: string) => (await db.query.processingJobs.findFirst({ where: eq(s.processingJobs.meetingId, id) }))!;
+  assert.deepEqual([report.reclaimedJobs, report.endedStaleCalls, report.abandonedCalls, report.failedMeetings], [2, 1, 1, 1], JSON.stringify(report));
+  assert.deepEqual([await status(talked.id), await status(silent.id), await status(active.id), await status(doomed.id)], ["ready", "abandoned", "live", "failed"]);
+  assert.equal((await jobOf(dead.id)).status, "succeeded", "requeued and drained in the same sweep");
+  const notes = await db.query.actionItems.findMany({ where: eq(s.actionItems.meetingId, talked.id) });
+  assert.ok(notes.some((a) => /release notes/.test(a.text)), "auto-ended call still got its notes");
+  assert.deepEqual(Object.values(await sweep(db)).slice(0, 5), [0, 0, 0, 0, 0], "second sweep is a no-op");
+  console.log(`✓ sweeper: stale call with lines → ended + notes, silent call → abandoned, live call untouched; dead worker → requeued + drained, out of retries → meeting failed; idempotent (${report.ms}ms)`);
 
   await client.close();
   console.log("\nOpen core verified.");

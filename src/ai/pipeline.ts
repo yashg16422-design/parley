@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "../db";
 import * as s from "../db/schema";
@@ -8,6 +9,10 @@ import { chunkPrompt, mergePrompt, summaryPrompt } from "./prompts";
 import { closedWindows, formatLine, type Seg, windowLines } from "./windows";
 
 export const PROMPT_VERSION = "hf-v1";
+
+/** Cache key for pipeline outputs: prompt version + a hash of the provider/model config that produced them. */
+export const versionFor = (llm: Pick<LlmClient, "model" | "config">) =>
+  `${PROMPT_VERSION}:${createHash("sha256").update(llm.config ?? llm.model).digest("hex").slice(0, 12)}`;
 
 type Opts = { llm: LlmClient; promptVersion?: string; concurrency?: number };
 
@@ -47,7 +52,7 @@ function matchOwner(name: string | null, participants: { id: string; name: strin
  * already have notes for this prompt version are skipped - so it can run
  * repeatedly while a call is live and only new windows cost a model call.
  */
-export async function processWindows(db: Database, meetingId: string, { llm, promptVersion = PROMPT_VERSION, concurrency = 3 }: Opts, callEnded = true) {
+export async function processWindows(db: Database, meetingId: string, { llm, promptVersion = versionFor(llm), concurrency = 3 }: Opts, callEnded = true) {
   const { m, segs, lines, names } = await loadMeeting(db, meetingId);
   const done = new Set(
     (await db.select({ i: s.chunkNotes.chunkIdx }).from(s.chunkNotes).where(and(eq(s.chunkNotes.meetingId, meetingId), eq(s.chunkNotes.promptVersion, promptVersion)))).map((r) => r.i),
@@ -80,7 +85,7 @@ export async function processWindows(db: Database, meetingId: string, { llm, pro
 }
 
 /** Stage 2: merge window notes into the meeting record and canonical action items. */
-export async function mergeMeeting(db: Database, meetingId: string, { llm, promptVersion = PROMPT_VERSION }: Opts) {
+export async function mergeMeeting(db: Database, meetingId: string, { llm, promptVersion = versionFor(llm) }: Opts) {
   const { m, lines, names } = await loadMeeting(db, meetingId);
   const chunks = await db.select().from(s.chunkNotes)
     .where(and(eq(s.chunkNotes.meetingId, meetingId), eq(s.chunkNotes.promptVersion, promptVersion)))
@@ -128,7 +133,7 @@ export async function mergeMeeting(db: Database, meetingId: string, { llm, promp
 }
 
 /** Stage 3: render one template from the meeting record. Cached per (meeting, template, prompt version). */
-export async function renderSummary(db: Database, meetingId: string, templateId: string, { llm, promptVersion = PROMPT_VERSION }: Opts) {
+export async function renderSummary(db: Database, meetingId: string, templateId: string, { llm, promptVersion = versionFor(llm) }: Opts) {
   const { m, lines } = await loadMeeting(db, meetingId);
   const [template, record, actions] = await Promise.all([
     db.query.templates.findFirst({ where: eq(s.templates.id, templateId) }),

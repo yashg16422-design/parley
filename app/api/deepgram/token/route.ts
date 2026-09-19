@@ -2,6 +2,10 @@ import { jsonError } from "@/http";
 import { requestUser } from "@/auth";
 import { getDb } from "@/db";
 import { resolveKey } from "@/keys";
+import { clientIp, takeToken } from "@/rate-limit";
+
+/** A call needs 1-2 tokens plus one per reconnect; these limits leave ample headroom for real use. */
+const LIMITS = { user: [20, 10 * 60_000], ip: [60, 10 * 60_000] } as const;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +18,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const me = await requestUser(req, "ingest");
   if (!me) return jsonError(401, "no workspace session or valid ingest token");
+  const db = getDb();
+  for (const [bucket, [limit, windowMs]] of [[`dg:user:${me.id}`, LIMITS.user], [`dg:ip:${clientIp(req.headers)}`, LIMITS.ip]] as const) {
+    const r = await takeToken(db, bucket, limit, windowMs);
+    if (!r.ok) return Response.json({ error: `too many transcription tokens requested; try again in ${r.retryAfterSec}s` }, { status: 429, headers: { "retry-after": String(r.retryAfterSec) } });
+  }
   // BYOK: the user's own Deepgram key if they saved one, else the server's.
-  const key = (await resolveKey(getDb(), me.id, "deepgram"))?.key;
+  const key = (await resolveKey(db, me.id, "deepgram"))?.key;
   if (!key) return jsonError(503, "live transcription isn't configured (add your Deepgram key in Settings, or set DEEPGRAM_API_KEY)");
   const r = await fetch("https://api.deepgram.com/v1/auth/grant", {
     method: "POST",

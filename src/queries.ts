@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, exists, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, notInArray, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import * as s from "./db/schema";
 
@@ -18,7 +18,7 @@ export async function visibleMeeting(id: string, userId: string) {
 
 export async function listMeetings(userId: string) {
   return getDb().query.meetings.findMany({
-    where: and(mine(userId), ne(s.meetings.status, "scheduled")),
+    where: and(mine(userId), notInArray(s.meetings.status, ["scheduled", "abandoned"])),
     orderBy: desc(s.meetings.startedAt),
     columns: { id: true, title: true, status: true, startedAt: true, durationMs: true, meetingType: true, platform: true, stats: true },
     with: { participants: { columns: { name: true, color: true, isExternal: true } }, actionItems: { columns: { status: true } }, knowledge: { columns: { knowledge: true } } },
