@@ -57,6 +57,13 @@
       "when": 1789807537020,
       "tag": "0007_llm_pool",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789808598837,
+      "tag": "0008_scratchpad",
+      "breakpoints": true
     }
   ]
 }

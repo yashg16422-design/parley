@@ -1,5 +1,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { disconnectFeed, removeProviderKey, revoke } from "@app/actions/settings";
+import { setTheme } from "@app/actions/workspace";
+import { cookies } from "next/headers";
 import { FeedForm, KeyForm, TokenForm } from "@/components/settings-forms";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +30,18 @@ export default async function Settings() {
     db.query.apiTokens.findMany({ where: and(eq(s.apiTokens.userId, me.id), isNull(s.apiTokens.revokedAt)), orderBy: desc(s.apiTokens.createdAt) }),
   ]);
   const vault = vaultReady();
+  const theme = (await cookies()).get("parley_theme")?.value === "light" ? "light" : "dark";
   return (
     <>
       <PageHeader title="Settings" subtitle="Your own provider keys, calendar feed and API access." />
       <div className="max-w-3xl space-y-6 p-6">
         {!vault && <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">This server has no <code>PARLEY_SECRET_KEY</code>, so keys and calendar feeds can&apos;t be stored yet.</p>}
+
+        <Card className="flex-row flex-wrap items-center gap-3 p-5">
+          <div className="flex-1"><h2 className="font-semibold">Appearance</h2><p className="text-sm text-muted-foreground">Dark is the default. Also in the ⌘K menu.</p></div>
+          <form action={setTheme.bind(null, "dark")}><SubmitButton size="sm" variant={theme === "dark" ? "default" : "outline"}>Dark</SubmitButton></form>
+          <form action={setTheme.bind(null, "light")}><SubmitButton size="sm" variant={theme === "light" ? "default" : "outline"}>Light</SubmitButton></form>
+        </Card>
 
         <Card className="gap-5 p-5">
           <div><h2 className="font-semibold">Your API keys</h2><p className="text-sm text-muted-foreground">Your key is used for your meetings instead of the server&apos;s. Stored encrypted; never shown again or sent to your browser.</p></div>

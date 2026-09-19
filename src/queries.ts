@@ -21,7 +21,7 @@ export async function listMeetings(userId: string) {
     where: and(mine(userId), notInArray(s.meetings.status, ["scheduled", "abandoned"])),
     orderBy: desc(s.meetings.startedAt),
     columns: { id: true, title: true, status: true, startedAt: true, durationMs: true, meetingType: true, platform: true, stats: true },
-    with: { participants: { columns: { name: true, color: true, isExternal: true } }, actionItems: { columns: { status: true } }, knowledge: { columns: { knowledge: true } } },
+    with: { participants: { columns: { name: true, color: true, isExternal: true } }, actionItems: { columns: { status: true } }, knowledge: { columns: {}, extras: { overview: sql<string | null>`${s.meetingKnowledge.knowledge}->>'overview'`.as("overview") } } },
   });
 }
 
@@ -34,10 +34,17 @@ export async function upcomingEvents(userId: string, days = 14) {
   });
 }
 
+/** Templates are seed data that never change at runtime: read once per server instance. */
+let templatesCache: Promise<{ id: string; name: string; description: string }[]> | null = null;
+function templateList() {
+  templatesCache ??= getDb().query.templates.findMany({ orderBy: asc(s.templates.sortOrder), columns: { id: true, name: true, description: true } }).catch((e) => ((templatesCache = null), Promise.reject(e)));
+  return templatesCache;
+}
+
 /** A meeting the user can see (`userId`), or any meeting when replaying a sample (`userId` omitted). */
 export async function meetingDetail(id: string, userId?: string) {
   const db = getDb();
-  const [m, templates] = await Promise.all([
+  const [m, templates, [recording]] = await Promise.all([
     db.query.meetings.findFirst({
       where: userId ? and(eq(s.meetings.id, id), mine(userId)) : eq(s.meetings.id, id),
       with: {
@@ -50,10 +57,11 @@ export async function meetingDetail(id: string, userId?: string) {
         calendarEvent: { columns: { id: true, agenda: true, attachments: true, meetingUrl: true } },
       },
     }),
-    db.query.templates.findMany({ orderBy: asc(s.templates.sortOrder), columns: { id: true, name: true, description: true } }),
+    templateList(),
+    // Fetched alongside (not after) the meeting: one round trip for the whole page.
+    db.select({ startMs: s.recordingChunks.startMs, mime: s.recordingChunks.mime }).from(s.recordingChunks).where(and(eq(s.recordingChunks.meetingId, id), eq(s.recordingChunks.idx, 0))),
   ]);
   if (!m) return null;
-  const [recording] = await db.select({ startMs: s.recordingChunks.startMs, mime: s.recordingChunks.mime }).from(s.recordingChunks).where(and(eq(s.recordingChunks.meetingId, id), eq(s.recordingChunks.idx, 0)));
   return { ...m, templates, recording: recording ?? null };
 }
 

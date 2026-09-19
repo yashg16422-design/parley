@@ -147,6 +147,15 @@ async function openCore(mayasMeeting: string) {
   assert.equal((await fetch(`${BASE}/api/meetings/${mayasMeeting}/insights`, { headers: { cookie: `parley_uid=${RAJ}` } })).status, 404);
   console.log(`✓ Ask Parley API: ${answer.citations.length} cited quotes with ?t= links (no model on server), 401/400 guards; live notes API: ${insight.actions.length} actions, owner-scoped`);
 
+  // Scratchpad: private per user, autosave upserts.
+  const pad = (uid: string, method = "GET", body?: string) => fetch(`${BASE}/api/meetings/${mayasMeeting}/scratchpad`, { method, headers: { "content-type": "application/json", cookie: `parley_uid=${uid}` }, ...(body !== undefined ? { body: JSON.stringify({ body }) } : {}) });
+  assert.equal((await (await pad(MAYA)).json()).body, "");
+  assert.equal((await pad(MAYA, "PUT", "[0:02] ask Raj about p95")).status, 200);
+  assert.equal((await pad(MAYA, "PUT", "[0:02] ask Raj about p95\nfollow up Friday")).status, 200);
+  assert.equal((await (await pad(MAYA)).json()).body, "[0:02] ask Raj about p95\nfollow up Friday");
+  assert.deepEqual([(await pad(RAJ)).status, (await pad(RAJ, "PUT", "hijack")).status, (await pad(MAYA, "PUT", "x".repeat(20_001))).status], [404, 404, 400]);
+  console.log("✓ scratchpad: private autosave (upsert, 20k cap), invisible to other users");
+
   // Deepgram token rate limit (20 per user per 10 min): burst until refused.
   const grant = () => fetch(`${BASE}/api/deepgram/token`, { method: "POST", headers: { cookie: `parley_uid=${RAJ}` } });
   let allowed = 0, refused: Response | null = null;

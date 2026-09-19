@@ -19,7 +19,7 @@ import { type Archive, captureGraph, startArchive } from "@/capture/recorder";
 import { OverlayLoading } from "@/components/loading-dots";
 import { InlineDots } from "@/components/submit-button";
 import { LeaveCallDialog, useLeaveGuard } from "./leave-dialog";
-import { LiveInsightsPanel } from "./live-insights-panel";
+import { LiveSide } from "./live-insights-panel";
 import { openDeepgram, TranscriptionUnavailable, type DgLine } from "@/lib/deepgram";
 import { clock } from "@/lib/format";
 import { findMeetingLink, PLATFORM_NAME, type Platform, zoomWebUrl } from "@/lib/meeting-links";
@@ -391,7 +391,7 @@ export function MicCall({ me, event, defaultSpeakers, fromLink = false, eventLin
       </div>
 
       <aside className="hidden min-h-0 space-y-6 overflow-y-auto border-l bg-muted/20 p-4 lg:block">
-        {phase !== "setup" && <LiveInsightsPanel meetingId={s.current.meetingId || null} lineCount={lines.length} />}
+        {phase !== "setup" && <LiveSide meetingId={s.current.meetingId || null} lineCount={lines.length} now={() => Date.now() - s.current.t0} />}
         <h2 className="mb-2 text-sm font-semibold">Agenda</h2>
         {event ? <div className="space-y-3"><Agenda text={event.agenda} /><Attachments eventId={event.id} items={event.attachments} /></div> : <p className="text-sm text-muted-foreground">Ad-hoc meeting. Start from a calendar event to see its agenda and files here.</p>}
       </aside>

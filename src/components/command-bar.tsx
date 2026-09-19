@@ -2,19 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckSquare, CornerDownLeft, Home, Link2, Mic, Search, Settings, Sparkles } from "lucide-react";
+import { CalendarDays, CheckSquare, CornerDownLeft, Home, Link2, Mic, Moon, Search, Settings, Sparkles, Sun } from "lucide-react";
+import { setTheme } from "@app/actions/workspace";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { JOIN_KEY, JOIN_PATH } from "@/components/join-by-link";
 import { findMeetingLink } from "@/lib/meeting-links";
 import { cn } from "@/lib/utils";
 
-type Item = { label: string; hint?: string; icon: typeof Search; go: (q: string) => string };
+type Item = { label: string; hint?: string; icon: typeof Search; go: (q: string) => string | null };
 const PAGES: Item[] = [
   { label: "Home", icon: Home, go: () => "/home" },
   { label: "Record a meeting", icon: Mic, go: () => "/live/mic" },
   { label: "Calendar", icon: CalendarDays, go: () => "/calendar" },
   { label: "Action items", icon: CheckSquare, go: () => "/action-items" },
   { label: "Settings: keys, calendar feed, tokens", icon: Settings, go: () => "/settings" },
+  { label: "Switch to light theme", icon: Sun, go: () => (void setTheme("light"), null) },
+  { label: "Switch to dark theme", icon: Moon, go: () => (void setTheme("dark"), null) },
 ];
 
 /** ⌘K anywhere: search every transcript, ask Parley, or jump to a page. */
@@ -52,7 +55,8 @@ export function CommandBar({ variant = "sidebar" }: { variant?: "sidebar" | "her
 
   const run = (i: Item) => {
     setOpen(false), setQ(""), setSel(0);
-    router.push(i.go(q.trim()));
+    const to = i.go(q.trim());
+    if (to) router.push(to);
   };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") e.preventDefault(), setSel((x) => Math.min(items.length - 1, x + 1));

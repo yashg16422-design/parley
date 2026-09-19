@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Loader2, PhoneOff, X } from "lucide-react";
 import { LeaveCallDialog } from "@/components/live/leave-dialog";
-import { LiveInsightsPanel } from "@/components/live/live-insights-panel";
+import { LiveSide } from "@/components/live/live-insights-panel";
 import { OverlayLoading } from "@/components/loading-dots";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,7 @@ export function LiveWatch({ id, title, participants, initial, initialStatus, isO
         {!segs.length && <p className="p-10 text-center text-sm text-muted-foreground">Waiting for the first words…</p>}
         <div ref={bottom} />
       </div>
-      <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block"><LiveInsightsPanel meetingId={id} lineCount={segs.length} /></aside>
+      <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block"><LiveSide meetingId={id} lineCount={segs.length} now={() => segs.at(-1)?.endMs ?? 0} /></aside>
       </div>
     </div>
   );

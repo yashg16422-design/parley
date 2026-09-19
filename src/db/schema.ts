@@ -503,6 +503,18 @@ export const rateLimits = pgTable("rate_limits", {
   hits: timestamp("hits", { withTimezone: true }).array().notNull(),
 });
 
+/** Scratchpad: a person's private notes on a meeting (during or after it). Never shared or sent to AI. */
+export const scratchpads = pgTable(
+  "scratchpads",
+  {
+    meetingId: uuid("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull().default(""),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.meetingId, t.userId] })],
+);
+
 const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
   dataType: () => "bytea",
   fromDriver: (v) => Buffer.from(v),

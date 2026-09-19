@@ -93,7 +93,7 @@ export default async function Home() {
                         <AiStatus m={m} />
                       </div>
                       <h3 className="mt-2 font-medium leading-snug group-hover:text-primary">{m.title}</h3>
-                      <p className="mt-1.5 line-clamp-3 flex-1 text-sm text-muted-foreground">{m.knowledge?.knowledge.overview ?? (m.status === "live" ? "Recording now. Open to watch the transcript and live notes." : "Notes will appear here when processing finishes.")}</p>
+                      <p className="mt-1.5 line-clamp-3 flex-1 text-sm text-muted-foreground">{m.knowledge?.overview ?? (m.status === "live" ? "Recording now. Open to watch the transcript and live notes." : "Notes will appear here when processing finishes.")}</p>
                       <div className="mt-4 flex items-center justify-between">
                         <AvatarStack people={m.participants} />
                         {m.actionItems.length > 0 && <span className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground"><CheckCircle2 className="size-3.5" />{done}/{m.actionItems.length}</span>}

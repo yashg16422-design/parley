@@ -86,37 +86,38 @@
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.74 0.1 190);
-    --primary-foreground: oklch(0.2 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.74 0.1 190);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* Deep blue-black night, one luminous cyan accent (tinted, never pure black) */
+    --background: oklch(0.155 0.012 255);
+    --foreground: oklch(0.96 0.005 250);
+    --card: oklch(0.195 0.014 255);
+    --card-foreground: oklch(0.96 0.005 250);
+    --popover: oklch(0.2 0.015 255);
+    --popover-foreground: oklch(0.96 0.005 250);
+    --primary: oklch(0.8 0.12 210);
+    --primary-foreground: oklch(0.18 0.03 240);
+    --secondary: oklch(0.24 0.015 255);
+    --secondary-foreground: oklch(0.96 0.005 250);
+    --muted: oklch(0.235 0.014 255);
+    --muted-foreground: oklch(0.7 0.015 255);
+    --accent: oklch(0.25 0.016 255);
+    --accent-foreground: oklch(0.96 0.005 250);
+    --destructive: oklch(0.7 0.19 22);
+    --border: oklch(1 0 0 / 9%);
+    --input: oklch(1 0 0 / 13%);
+    --ring: oklch(0.8 0.12 210);
+    --chart-1: oklch(0.8 0.12 210);
+    --chart-2: oklch(0.7 0.1 180);
+    --chart-3: oklch(0.6 0.08 250);
+    --chart-4: oklch(0.5 0.06 250);
+    --chart-5: oklch(0.4 0.04 250);
+    --sidebar: oklch(0.135 0.012 255);
+    --sidebar-foreground: oklch(0.96 0.005 250);
+    --sidebar-primary: oklch(0.8 0.12 210);
+    --sidebar-primary-foreground: oklch(0.18 0.03 240);
+    --sidebar-accent: oklch(0.24 0.015 255);
+    --sidebar-accent-foreground: oklch(0.96 0.005 250);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(0.8 0.12 210);
 }
 
 @layer base {
@@ -149,3 +150,22 @@ h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 .tabular-nums, time, code { font-variant-numeric: tabular-nums; }
 html { scroll-behavior: smooth; }
+
+/* Landing: starfield + slow drift, GPU-only (transform/opacity) */
+.starfield {
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgb(255 255 255 / 0.55) 50%, transparent 51%),
+    radial-gradient(1px 1px at 72% 12%, rgb(255 255 255 / 0.4) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 38% 64%, rgb(255 255 255 / 0.45) 50%, transparent 51%),
+    radial-gradient(1px 1px at 88% 46%, rgb(255 255 255 / 0.35) 50%, transparent 51%),
+    radial-gradient(1px 1px at 22% 82%, rgb(255 255 255 / 0.3) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 58% 30%, rgb(255 255 255 / 0.5) 50%, transparent 51%),
+    radial-gradient(1px 1px at 93% 88%, rgb(255 255 255 / 0.35) 50%, transparent 51%),
+    radial-gradient(1px 1px at 5% 50%, rgb(255 255 255 / 0.4) 50%, transparent 51%);
+  background-size: 420px 420px;
+}
+@keyframes drift { from { transform: translateY(0); } to { transform: translateY(-420px); } }
+.starfield-drift { animation: drift 120s linear infinite; }
+@keyframes glow { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.06); } }
+.glow-pulse { animation: glow 9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .starfield-drift, .glow-pulse, .eq-bar, .loading-dot { animation: none; } }

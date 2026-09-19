@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Bookmark, PhoneOff, Radio, Sparkles, X } from "lucide-react";
 import { OverlayLoading } from "@/components/loading-dots";
 import { LeaveCallDialog, useLeaveGuard } from "./leave-dialog";
-import { LiveInsightsPanel } from "./live-insights-panel";
+import { LiveSide } from "./live-insights-panel";
 import { addHighlight } from "@app/actions/meetings";
 import { ParticipantGrid, type Participant } from "@/components/meeting/participant-grid";
 import { lineAt, type Seg } from "@/components/meeting/player";
@@ -156,7 +156,7 @@ export function LiveCall({ source, participants, segments, initialSpeed }: { sou
       </div>
     </div>
       <aside className="hidden min-h-0 overflow-y-auto border-l bg-muted/20 p-4 lg:block">
-        {phase === "ready" ? <p className="text-sm text-muted-foreground">Live notes build here as the replay runs: decisions, action items and open questions, with AI notes for each finished 10-minute window.</p> : <LiveInsightsPanel meetingId={live.current.meetingId || null} lineCount={heard.length} />}
+        {phase === "ready" ? <p className="text-sm text-muted-foreground">Live notes build here as the replay runs: decisions, action items and open questions, with AI notes for each finished 10-minute window.</p> : <LiveSide meetingId={live.current.meetingId || null} lineCount={heard.length} now={() => live.current.clock} />}
       </aside>
       <LeaveCallDialog open={leaving} onOpenChange={setLeaving} onEnd={end} onDiscard={discard} hasContent={segments.some((x) => x.endMs <= clockMs)} />
       {phase === "ending" && <OverlayLoading label={endingLabel} />}

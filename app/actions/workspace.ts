@@ -62,3 +62,9 @@ export async function connectCalendar() {
   );
   revalidatePath("/", "layout");
 }
+
+/** Light or dark (default). A cookie, so the server renders the right theme with no flash. */
+export async function setTheme(theme: "light" | "dark") {
+  (await cookies()).set("parley_theme", theme === "light" ? "light" : "dark", { path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365 });
+  revalidatePath("/", "layout");
+}

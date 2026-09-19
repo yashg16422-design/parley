@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -13,9 +14,10 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const theme = (await cookies()).get("parley_theme")?.value === "light" ? "light" : "dark";
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable} ${theme}`} style={{ colorScheme: theme }}>
       <body className="antialiased">
         <TooltipProvider delayDuration={200}>
           {children}

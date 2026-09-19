@@ -14,6 +14,7 @@ import { ParticipantGrid, type Participant } from "./participant-grid";
 import { createPlayer, jumpTo, lineAt, type Seg, usePlayer } from "./player";
 import { Scrubber } from "./scrubber";
 import { ActionItems, type ActionItemView, Moments, TalkTime } from "./side-lists";
+import { Scratchpad } from "./scratchpad";
 import { SoundToggle } from "./sound-toggle";
 import { SummaryPanel } from "./summary-panel";
 import { useMeetingSound } from "./use-sound";
@@ -126,10 +127,11 @@ export function MeetingView(m: MeetingViewProps) {
 
       <aside className="flex min-h-0 flex-col border-l bg-muted/20 max-lg:border-t">
         <Tabs defaultValue="summary" className="flex min-h-0 flex-1 flex-col gap-0">
-          <TabsList className="m-3 grid grid-cols-3">
+          <TabsList className="m-3 grid grid-cols-4">
             <TabsTrigger value="summary">Summary</TabsTrigger>
             <TabsTrigger value="actions">Action items{m.actionItems.length ? ` · ${m.actionItems.length}` : ""}</TabsTrigger>
             <TabsTrigger value="moments">Clips</TabsTrigger>
+            <TabsTrigger value="pad">Scratchpad</TabsTrigger>
           </TabsList>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
             <TabsContent value="summary" className="space-y-6">
@@ -147,6 +149,7 @@ export function MeetingView(m: MeetingViewProps) {
             </TabsContent>
             <TabsContent value="actions"><ActionItems items={m.actionItems} onJump={jump} /></TabsContent>
             <TabsContent value="moments"><Moments highlights={highlights} clips={m.clips} onJump={jump} /></TabsContent>
+            <TabsContent value="pad"><Scratchpad meetingId={m.id} now={() => player.get().ms} onJump={(ms) => (jump(ms), player.play())} /></TabsContent>
           </div>
         </Tabs>
       </aside>

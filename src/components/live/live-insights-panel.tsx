@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CircleHelp, GitCommitHorizontal, ListChecks, Sparkles } from "lucide-react";
 import type { Insight, LiveInsights } from "@/live-insights";
 import { LoadingDots } from "@/components/loading-dots";
+import { Scratchpad } from "@/components/meeting/scratchpad";
 import { clock } from "@/lib/format";
 
 const THROTTLE_MS = 6_000;
@@ -75,6 +76,21 @@ function Group({ icon: Icon, title, items, owner }: { icon: typeof Sparkles; tit
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** Side panel for a call in progress: the AI's running notes, and your own scratchpad. */
+export function LiveSide({ meetingId, lineCount, now }: { meetingId: string | null; lineCount: number; now: () => number }) {
+  const [tab, setTab] = useState<"notes" | "pad">("notes");
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 rounded-lg bg-muted p-0.5 text-xs font-medium">
+        {(["notes", "pad"] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`rounded-md py-1.5 transition-colors ${tab === t ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{t === "notes" ? "Live notes" : "Scratchpad"}</button>
+        ))}
+      </div>
+      {tab === "notes" ? <LiveInsightsPanel meetingId={meetingId} lineCount={lineCount} /> : meetingId ? <Scratchpad meetingId={meetingId} now={now} /> : null}
     </div>
   );
 }
