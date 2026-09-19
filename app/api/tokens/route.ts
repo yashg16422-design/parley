@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { audit } from "@/audit";
 import { createToken, revokeToken } from "@/auth";
+import { getDb } from "@/db";
+import { clientIp } from "@/rate-limit";
 import { badRequest, jsonError } from "@/http";
 import { currentUserId, findUser } from "@/session";
 
@@ -15,7 +18,9 @@ export async function POST(req: Request) {
   if (me.kind === "guest") return jsonError(403, "sign up to create access tokens");
   const b = body.safeParse(await req.json().catch(() => null));
   if (!b.success) return badRequest(b.error);
-  return Response.json(await createToken(me.id, b.data.name, b.data.scopes), { status: 201, headers: { "cache-control": "no-store" } });
+  const created = await createToken(me.id, b.data.name, b.data.scopes);
+  await audit(getDb(), me.id, "token.created", created.token.slice(0, 15), { scopes: b.data.scopes }, clientIp(req.headers));
+  return Response.json(created, { status: 201, headers: { "cache-control": "no-store" } });
 }
 
 export async function DELETE(req: Request) {
@@ -24,5 +29,6 @@ export async function DELETE(req: Request) {
   const id = z.uuid().safeParse(new URL(req.url).searchParams.get("id"));
   if (!id.success) return badRequest(id.error);
   await revokeToken(me.id, id.data);
+  await audit(getDb(), me.id, "token.revoked", id.data, undefined, clientIp(req.headers));
   return new Response(null, { status: 204 });
 }
