@@ -9,3 +9,6 @@ node_modules/
 next-env.d.ts
 .vercel
 .env*
+
+# Session logs stay local for now
+.agent-logs/
